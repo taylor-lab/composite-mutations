@@ -1,0 +1,131 @@
+---
+title: "Figure 3"
+output: html_document
+chunk_output_type: console
+---
+
+```{r setup, include = FALSE, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, autodep = knitr::dep_prev())
+source(here::here('r/prerequisites.R'))
+```
+
+
+
+### Panel A
+
+The allelic configuration (phase) of compound mutations by the type of mutation and affected cancer gene. 
+
+```{r Panel A, fig.width=6,fig.height=8}
+
+## load phased data (using the pairwise-combos)
+d <- fread(here('data/data_mutations_phased.txt'),select=c('exclude','Tumor_Sample_Barcode','putative_resistance_mutation.1','putative_resistance_mutation.2',
+                'truncating.1','truncating.2','Hugo_Symbol','Role','phase'))
+d <- d[exclude==F & putative_resistance_mutation.1==F & putative_resistance_mutation.2==F,]
+d$Class <- ''
+d[truncating.1==F & truncating.2==F,Class:='Non-truncating/Non-truncating']
+d[(truncating.1==T & truncating.2==F | truncating.1==F & truncating.2==T),Class:='Non-truncating/Truncating']
+d[truncating.1==T & truncating.2==T,Class:='Truncating/Truncating']
+
+## don't overcount 3+ mutation compound-mutations; using unique sample/gene/Class counts
+d$id <- paste(d$Tumor_Sample_Barcode, d$Hugo_Symbol, d$Class, d$phase)
+dd <- d
+dd <- dd[!duplicated(id),c('Tumor_Sample_Barcode','Hugo_Symbol','Class','Role','phase','id'),with=F]
+
+dat <- as.data.frame.matrix(xtabs(~Role + phase,data=dd))
+dat <- dat[c('Oncogene','TSG'),c('cis','trans')]
+
+
+## format the Classes: Oncogene/nontrunc/nontrunc vs TSG (3 categories)
+dd$Class <- paste0(dd$Role,' (',dd$Class,')')
+dd <- dd[Role=='TSG' | Class %in% c('Oncogene (Non-truncating/Non-truncating)'),]
+class_levels <- sortunique(dd$Class)
+dd$Class <- factor(dd$Class,levels=class_levels)
+dd$phase <- factor(dd$phase,levels=c('cis','trans'))
+
+
+## tabulate phase vs class
+dat <- as.data.frame.matrix(xtabs(~Class + phase,data=dd))
+dat <- cbind(Class=rownames(dat),adt(dat))
+dat$Class <- factor(dat$Class,levels=dat$Class)
+dat$prop_cis <- dat$cis / (dat$cis + dat$trans)
+dat$prop_trans <- 1 - dat$prop_cis
+ci <- binom::binom.confint(x=dat$trans,n=(dat$cis+dat$trans),method='exact')
+dat$lwr <- ci$lower
+dat$upr <- ci$upper
+
+## get pairwise combinations for calculating p-values
+m <- dat[,c('Class','cis','trans'),with=F]
+m2 <- adt(expand.grid(m$Class,m$Class))
+m2$i <- 1:nrow(m2)
+m2$Var1 <- as.character(m2$Var1)
+m2$Var2 <- as.character(m2$Var2)
+f <- function(i,m) {
+    m <- m[i,]
+    sorted <- sort(c(m$Var1,m$Var2))
+    m$Var1 <- sorted[1]
+    m$Var2 <- sorted[2]
+    m
+}
+m2 <- rbindlist(lapply(1:nrow(m2), f, m2))
+m2 <- m2[Var1 != Var2,]
+m2$Var1 <- as.character(m2$Var1)
+m2$Var2 <- as.character(m2$Var2)
+m2$id <- paste(m2$Var1,m2$Var2)
+m2 <- m2[!duplicated(id),]
+m3 <- merge(m2, m,by.x='Var1', by.y='Class', all.x=T)
+m3 <- merge(m3, m,by.x='Var2', by.y='Class', all.x=T)
+
+## calculate pvalues
+getp <- function(i,m3) {
+    tmp <- m3[i,]
+    mat <- rbind(
+                 c(tmp$cis.x,tmp$trans.x),
+                 c(tmp$cis.y,tmp$trans.y)
+                 )
+    tst <- fisher.test(mat,alternative='two.sided')
+    tmp$p <- tst$p.value
+    tmp
+}
+m4 <- rbindlist(lapply(1:nrow(m3), getp, m3))
+m4$plab <- paste0('p=',prettyNum(m4$p,digits=1))
+m4$Var1 <- as.character(m4$Var1)
+m4$Var2 <- as.character(m4$Var2)
+
+## prep data for plotting
+dat1 <- dat[,c('Class','prop_cis','prop_trans'),with=F]
+dat1 <- melt(dat1,id.var='Class')
+dat1$variable <- ifelse(dat1$variable=='prop_cis','Cis','Trans')
+dat1$variable <- factor(dat1$variable,levels=c('Cis','Trans'))
+dat2 <- dat[,c('Class','lwr'),with=F]
+dat2 <- melt(dat2,id.var='Class')
+dat3 <- dat[,c('Class','upr'),with=F]
+dat3 <- melt(dat3,id.var='Class')
+dat23 <- merge(dat2,dat3,by='Class')
+dat23[,c('variable.x','variable.y'):=NULL]
+names(dat23) <- c('Class','lwr','upr')
+dat23$variable <- 'Trans'
+dat1 <- merge(dat1,dat23,by=c('Class','variable'),all.x=T)
+dat1$variable <- factor(dat1$variable,levels=c('Cis','Trans'))
+dat1$value <- 100*dat1$value
+dat1$lwr <- 100*dat1$lwr
+dat1$upr <- 100*dat1$upr
+
+## plot
+cols <- colors$barplot2col
+names(cols) <- c('Trans','Cis')
+p <- ggplot(dat1, aes(x=Class,y=value)) +
+    geom_bar(stat='identity',aes(fill=variable)) +
+    geom_errorbar(aes(min=lwr,max=value),color='white',width=0,size=0.5) +
+    geom_errorbar(aes(min=value,max=upr),color='black',width=0,size=0.5) +
+    scale_fill_manual(values=cols,name='Phase') +
+    scale_y_continuous(expand=c(0,0),breaks=seq(0,150,by=25),limits=c(0,150)) +
+    labs(x=NULL,y='% phaseable compound mutants',title=NULL) +
+    theme(legend.position='right',axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
+
+## add comparison p-values
+for(a in 1:nrow(m4)) p <- p + geom_signif(comparisons=list(c(m4$Var1[a],m4$Var2[a])),annotations=m4$plab[a],y=(100+(50*a/7.5)),tip.length=0.1,size=0.25)
+p
+
+```
+
+

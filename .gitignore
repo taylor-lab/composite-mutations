@@ -1,0 +1,12 @@
+*.Rproj*
+*.Rhistory
+.DS_Store
+.Rproj.user
+r/*.html
+r/*.pdf
+
+# these data files are too large to keep in this repo,
+# pull them from google drive instead
+data/data_mutations.txt
+data/data_mutations_tcga.txt
+data/data_mutations_phased.txt
