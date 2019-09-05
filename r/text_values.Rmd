@@ -4,17 +4,27 @@ output: html_document
 chunk_output_type: console
 ---
 
-```{r setup, include=F, echo=F}
+```{r setup, include=F, echo=T}
 knitr::opts_chunk$set(echo = F, message = F, warning = FALSE, autodep = knitr::dep_prev())
+
+## source prerequisites (libraries, functions, variables)
 source(here::here('r/prerequisites.R'))
 d_clinical <- fread(here('data/data_clinical.txt'))
+
+
+## load starting datasets
 d_mutations <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','exclude','Hugo_Symbol','Role','putative_resistance_mutation',
                                                               'Variant_Classification','Variant_Type','tcn', 'mutationid', 'high_tmb','hotspot_class',
-                                                              'tm','hotspotid','HGVSp_Short'))
+                                                              'tm','hotspotid','HGVSp_Short','truncating','Reference_Allele','Tumor_Seq_Allele2',
+                                                              'Start_Position','End_Position'))
 d_clinical_tcga <- fread(here('data/data_clinical_tcga.txt'))
 d_mutations_tcga <- fread(here('data/data_mutations_tcga.txt'),select=c('Tumor_Sample_Barcode','Hugo_Symbol'))
 gene_info <- fread(here('data/gene_info.txt'))
 d_phased <- fread(here('data/data_mutations_phased.txt')) 
+
+## exclude duplicates from phasing data
+d_phased$id <- paste(d_phased$mutationid.1,d_phased$mutationid.2,sep=' + ')
+d_phased <- d_phased[!duplicated(id),]
 ```
 
 ### Abstract
@@ -37,7 +47,7 @@ result <- d_mutations[,check_compounds_per_sample(.SD),by=Tumor_Sample_Barcode]
 samples_with_compounds <- result$Tumor_Sample_Barcode[result$any_compound==T]
 n_samples_with_compounds <- length(unique(samples_with_compounds))
 fraction_samples_with_compounds <- n_samples_with_compounds / n_samples
-round(100*fraction_samples_with_compounds)
+round(100*fraction_samples_with_compounds,3)
 ```
 
 ### Paragraph 2
@@ -230,6 +240,8 @@ pval
 
 ## load phased data with pairwise-mutation comparison
 d <- d_phased
+
+## annotate class (i.e. missense/missense, missense/truncating, etc.
 d <- d[exclude==F & putative_resistance_mutation.1==F & putative_resistance_mutation.2==F,]
 d$Class <- ''
 d[truncating.1==F & truncating.2==F,Class:='Non-truncating/Non-truncating']
@@ -331,7 +343,8 @@ dat$q_enriched <- p.adjust(dat$p_enriched,method='BH')
 dat$q_twosided <- p.adjust(dat$p_twosided,method='BH')
 
 ## genes with significant enrichment for compound mutations 
-dat[q_enriched < 0.01,c('Hugo_Symbol','Role','q_enriched'),with=F]
+dat_genes_enriched_for_compounds <- dat[q_enriched < 0.01,c('Hugo_Symbol','Role','q_enriched'),with=F]
+dat_genes_enriched_for_compounds
 ```
 
 #### Percentage of PIK3CA mutations that are compound mutations
@@ -350,7 +363,8 @@ out
 
 #### Genes depleted for compound mutations
 ```{r, echo=T}
-dat[q_twosided < 0.01 & logOR < 0,c('Hugo_Symbol','Role','q_twosided','logOR'),with=F]
+dat_genes_depleted_for_compounds <- dat[q_twosided < 0.01 & logOR < 0,c('Hugo_Symbol','Role','q_twosided','logOR'),with=F]
+dat_genes_depleted_for_compounds
 ```
 
 #### IDH1 is depleted for compound mutations
@@ -451,8 +465,10 @@ pval
 #### Percentage of compound mutations per gene role where more-prevalent allele is mutated first
 ```{r, echo=T}
 
-## load phasing data; annotate functional mutations
+## load phasing data
 d <- d_phased
+
+## annotate functional mutations
 d <- d[putative_resistance_mutation.1==F & putative_resistance_mutation.2==F & exclude==F,]
 d[hotspotid.1!='',tm.1:=hotspotid.1] ## this will group IF-INDEL hotspots
 d[hotspotid.2!='',tm.2:=hotspotid.2]
@@ -546,6 +562,360 @@ out
 
 
 ### Paragraph 6
+
+#### Tabulate phase-able compound mutations
+```{r, echo=T}
+d <- d_phased[exclude==F & !is.na(phase) & phase!='unknown',]
+
+## count compound mutations with 3+ mutations of the same phase only once
+d$id <- paste(d$Tumor_Sample_Barcode,d$Hugo_Symbol,d$phase)
+d <- d[!duplicated(id),]
+
+## number of evaluable compound mutations
+nrow(d)
+
+## tabulate compounds with different phasing outcomes
+d[phase %in% c('trans or separate cells','ambiguous: 3+ cis, 3+ trans'),phase:='ambiguous']
+tbl <- table.freq(d$phase)
+tbl$Percentage <- round(100*(tbl$N / sum(tbl$N)),3)
+setnames(tbl,'value','Phase')
+tbl
+```
+
+
+#### TSGs with 2 truncating variants are more likely in trans, Oncogenes with two missense more likely in cis
+```{r, echo=T}
+
+
+
+
+## load phased data (using the pairwise-combos)
+d <- d_phased
+d <- d[exclude==F & putative_resistance_mutation.1==F & putative_resistance_mutation.2==F,]
+d$Class <- ''
+d[truncating.1==F & truncating.2==F,Class:='Non-truncating/Non-truncating']
+d[(truncating.1==T & truncating.2==F | truncating.1==F & truncating.2==T),Class:='Non-truncating/Truncating']
+d[truncating.1==T & truncating.2==T,Class:='Truncating/Truncating']
+
+## don't overcount 3+ mutation compound-mutations; using unique sample/gene/Class counts
+d$id <- paste(d$Tumor_Sample_Barcode, d$Hugo_Symbol, d$Class, d$phase)
+dd <- d
+dd <- dd[!duplicated(id),c('Tumor_Sample_Barcode','Hugo_Symbol','Class','Role','phase','id'),with=F]
+
+## format the Classes: Oncogene/nontrunc/nontrunc vs TSG (3 categories)
+dd$Class <- paste0(dd$Role,' (',dd$Class,')')
+dd <- dd[Role=='TSG' | Class %in% c('Oncogene (Non-truncating/Non-truncating)'),]
+class_levels <- sortunique(dd$Class)
+dd$Class <- factor(dd$Class,levels=class_levels)
+dd$phase <- factor(dd$phase,levels=c('cis','trans'))
+
+## tabulate the results
+dat <- as.data.frame.matrix(xtabs(~Class + phase,data=dd))
+dat <- cbind(Class=rownames(dat),adt(dat))
+dat$Class <- factor(dat$Class,levels=dat$Class)
+dat$prop_cis <- dat$cis / (dat$cis + dat$trans)
+dat$prop_trans <- 1 - dat$prop_cis
+dat <- dat[Class %in% c('Oncogene (Non-truncating/Non-truncating)','TSG (Truncating/Truncating)'),]
+dat
+
+## P-value
+m <- as.matrix(dat[,(2:3),with=F])
+rownames(m) <- dat$Class
+fisher.test(m,alternative='two.sided')$p.value
+```
+
+
+#### P-value for significance of 100% resistance mutation compounds in cis vs non-resistance
+```{r, echo=T}
+
+## here we will find compound mutations associated with resistance, tabulate their incidence in cis and trans, and compare this to the cis/trans frequencies for compounds not including resistance mutations.
+## NB: Phased inferred from LOH was used in the figure panel "Fraction of phase-able compound mutations" per gene, but not to calculate P-value for difference with non-resistance compounds, as this inferrential phasing was not generally done for them.
+
+## define helper functions here
+label_compound <- function(d) {
+    label <- ''
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='Exon 19 INDELs' & d$HGVSp_Short.2=='T790M'))  label <- 'EGFR Exon 19 INDELs + T790M'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='T790M' & d$HGVSp_Short.2=='L858R'))  label <- 'EGFR L858R + T790M'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='D761Y' & d$HGVSp_Short.2=='T790M'))  label <- 'EGFR D761Y + T790M'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='G719A' & d$HGVSp_Short.2=='T790M'))  label <- 'EGFR G719A + T790M'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='T790M' & d$HGVSp_Short.2=='C797S'))  label <- 'EGFR T790M + C797S'
+
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='Exon 19 INDELs' & d$HGVSp_Short.2=='C797S'))  label <- 'EGFR Exon 19 INDELs + C797S'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='C797S' & d$HGVSp_Short.2=='L858R'))  label <- 'EGFR L858R + C797S'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='D761Y' & d$HGVSp_Short.2=='C797S'))  label <- 'EGFR D761Y + C797S'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='G719A' & d$HGVSp_Short.2=='C797S'))  label <- 'EGFR G719A + C797S'
+
+    if(d$Hugo_Symbol=='AR' &   (d$HGVSp_Short.1=='L702H'  & d$HGVSp_Short.2=='H875Y'))  label <- 'AR L702H + H875Y'
+    if(d$Hugo_Symbol=='ALK' &  (d$HGVSp_Short.1=='D1203N' & d$HGVSp_Short.2=='L1196M')) label <- 'ALK D1203N + L1196M'
+    if(d$Hugo_Symbol=='ALK' &  (d$HGVSp_Short.1=='G1202R' & d$HGVSp_Short.2=='L1196M')) label <- 'ALK G1202R + L1196M'
+    if(d$Hugo_Symbol=='BRCA1' &  (d$HGVSp_Short.1=='E1257Gfs*9' & d$HGVSp_Short.2=='N1235Tfs*18')) label <- 'BRCA1 Frame-restoring INDELs'
+
+    if(label=='')  label <- paste(d$Hugo_Symbol,d$HGVSp_Short.1,'+',d$HGVSp_Short.2)
+    d$label <- label
+    d
+}
+
+extract_cis_trans <- function(d) {
+    ## don't overcount multiple pairs of compound mutations in the same sample+gene+phase
+    d$id <- paste(d$Tumor_Sample_Barcode,d$Hugo_Symbol,d$phase)
+    d <- d[!duplicated(id),c('Tumor_Sample_Barcode','metamaintype','Hugo_Symbol','Role','phase','id',
+                             'putative_resistance_mutation.1','putative_resistance_mutation.2',
+                             'HGVSp_Short.1','HGVSp_Short.2',
+                             'ccf_Mcopies.1','clonal.1','ccf_Mcopies.2','clonal.2',
+                             'common_reads_alt1_alt2','common_reads_alt1_ref2','common_reads_ref1_alt2','common_reads_ref1_ref2',
+                             't_depth.1','t_depth.2'),with=F]
+    d
+}
+
+summarize_compound_with_alleles <- function(d) {
+    n <- length(unique(strtrim(d$Tumor_Sample_Barcode,9)))
+    list(n=n)
+}
+
+
+## load phased data, add phasing by LOH with FACETS and manual review
+d <- d_phased
+d <- d[exclude==F & (putative_resistance_mutation.1==T | putative_resistance_mutation.2==T),]
+reviewed <- fread(here('data/resistance_mutation_phasing_reviewed.txt'))
+reviewed <- reviewed[,c('Tumor_Sample_Barcode','Hugo_Symbol','HGVSp_Short.1','HGVSp_Short.2','phase_reviewed'),with=F]
+reviewed$id <- paste(reviewed$Tumor_Sample_Barcode,reviewed$Hugo_Symbol,reviewed$HGVSp_Short.1,reviewed$HGVSp_Short.2)
+reviewed <- reviewed[!duplicated(id),]
+d <- merge(d, reviewed[,c('Tumor_Sample_Barcode','Hugo_Symbol','HGVSp_Short.1','HGVSp_Short.2','phase_reviewed'),with=F],
+           by=c('Tumor_Sample_Barcode','Hugo_Symbol','HGVSp_Short.1','HGVSp_Short.2'),all.x=T)
+d[phase_reviewed %in% c('cis','cis*'),phase:=phase_reviewed]
+
+## exclude these compound mutations for stated reasons
+to_remove <- c(
+               ## bad facets fit in this sample, we can't be sure variants are in the same cell: exclude
+               which(d$Tumor_Sample_Barcode=='P-0013110-T01-IM5' & d$tm.1=='KIT C809' & d$tm.2=='KIT indel:820-821'),
+               ## this sample has EGFR S768 cis with EGFR T790, but both are in trans with a passenger C775, so I am removing the passenger compound
+               which(d$Tumor_Sample_Barcode=='P-0003923-T01-IM5' & d$tm.1=='EGFR C775' & d$tm.2=='EGFR T790'),
+               which(d$Tumor_Sample_Barcode=='P-0003923-T01-IM5' & d$tm.1=='EGFR S768' & d$tm.2=='EGFR C775'))
+d <- d[-to_remove,]
+
+## collapse in-frame INDEL mutation labels to just the exon of the INDEL
+d$HGVSp_Short.1 <- gsub('p[.]','',d$HGVSp_Short.1)
+d$HGVSp_Short.2 <- gsub('p[.]','',d$HGVSp_Short.2)
+d[Variant_Classification.1 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol=='EGFR' & Exon_Number.1=='19/28',HGVSp_Short.1:=paste('Exon 19 INDELs')]
+d[Variant_Classification.1 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol=='EGFR' & Exon_Number.1=='20/28',HGVSp_Short.1:=paste('Exon 20 INDELs')]
+d[Variant_Classification.2 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol=='EGFR' & Exon_Number.2=='19/28',HGVSp_Short.2:=paste('Exon 19 INDELs')]
+d[Variant_Classification.2 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol=='EGFR' & Exon_Number.2=='20/28',HGVSp_Short.2:=paste('Exon 20 INDELs')]
+d[Variant_Classification.1 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol=='KIT' & Exon_Number.1=='11/21',HGVSp_Short.1:=paste('Exon 11 INDELs')]
+d[Variant_Classification.2 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol=='KIT' & Exon_Number.2=='11/21',HGVSp_Short.2:=paste('Exon 11 INDELs')]
+d <- d[phase %in% c('cis','cis*','trans'),]
+
+## don't overcount compounds within each sample/gene/alleles/phase combination (redoing after the above label collapsing in last step)
+d$id <- paste(strtrim(d$Tumor_Sample_Barcode,9),d$Hugo_Symbol,d$HGVSp_Short.1,d$HGVSp_Short.2,d$phase)
+d <- d[!duplicated(id),]
+
+## format data
+dd <- extract_cis_trans(d)
+dd <- dd[order(Tumor_Sample_Barcode,Hugo_Symbol),]
+dd$i <- 1:nrow(dd)
+dd <- dd[,label_compound(.SD),by=i]
+
+## these samples have bona fide EGFR resistance mutation with 2+ other EGFR mutations, but the resistance mutation was not phaseable with any, so exclude them
+toremove <- which(dd$Hugo_Symbol=='EGFR' & (grepl('T790M',dd$label)==F & grepl('C797S',dd$label)==F))
+dd <- dd[-toremove,]
+
+## Exclude ESR1 resistance mutations because ESR1 there is no initial ESR1 drug target
+dd <- dd[Hugo_Symbol!='ESR1',]
+
+## get final tabulation of phaseable compound mutations associated with therapeutic resistance
+info <- dd[,summarize_compound_with_alleles(.SD),by=c('Hugo_Symbol','label','phase')]
+info <- info[phase %in% c('cis','cis*','trans'),]
+summarize_gene <- function(info) list(n=sum(info$n))
+ns <- info[,summarize_gene(.SD),by=Hugo_Symbol]
+ns <- ns[order(n,decreasing=T),]
+info$Hugo_Symbol <- factor(info$Hugo_Symbol, levels=ns$Hugo_Symbol)
+info <- info[order(info$Hugo_Symbol,info$n,decreasing=F),]
+info$label <- factor(info$label, levels=info$label)
+
+## get the number of cis/trans compound mutations not associated with resistance
+d <- d_phased
+d <- d[exclude==F & (putative_resistance_mutation.1==F & putative_resistance_mutation.2==F),]
+d$important.1 <- d$hotspot.1==T | d$oncogenic.1 %in% c('Oncogenic','Likely Oncogenic','Predicted Oncogenic') |
+    (d$Role %in% c('TSG','Oncogene/TSG') & d$truncating.1==T)
+d$important.2 <- d$hotspot.2==T | d$oncogenic.2 %in% c('Oncogenic','Likely Oncogenic','Predicted Oncogenic') |
+    (d$Role %in% c('TSG','Oncogene/TSG') & d$truncating.2==T)
+dd <- extract_cis_trans(d)
+dd$id <- paste(strtrim(dd$Tumor_Sample_Barcode,9),dd$Hugo_Symbol,dd$HGVSp_Short.1,dd$HGVSp_Short.2,dd$phase)
+dd <- dd[!duplicated(id),]
+dd <- dd[order(Hugo_Symbol),]
+dd$i <- 1:nrow(dd)
+tbl <- table.freq(dd$phase)
+tbl <- tbl[value %in% c('cis','trans'),]
+names(tbl) <- c('phase','N')
+tbl$group <- 'All non-resistance mutations'
+
+## merge the result with the values for resistance mutations calculated above
+tbl_rm <- data.table(phase=c('cis','trans'),N=c(sum(info$n[info$phase=='cis']),0),group='Resistance mutations')
+dat <- rbind(tbl, tbl_rm)
+
+# compare cis and trans rates between compounds associated with/without resistance
+m0 <- as.data.frame(reshape(dat,idvar='group',timevar='phase',direction='wide'))
+m <- m0
+names(m) <- gsub('N[.]','',names(m))
+m$cis <- m$cis / c(m$cis + m$trans)
+m$trans <- 1-m$cis
+m <- melt(m, id.var='group')
+names(m) <- c('group','phase','prop')
+m$prop <- 100*m$prop
+m$phase <- factor(m$phase, levels=c('trans','cis'))
+m0$group <-  NULL
+names(m0) <- gsub('N[.]','',names(m0))
+pval <- fisher.test(m0)$p.value
+pval
+```
+
+
+### Paragraph 7
+
+#### Percentage of cis compounds among oncogenes with greatest cis rate
+
+```{r, echo=T}
+## count the instances of cis/trans per gene
+d <- d_phased
+d <- d[exclude==F & putative_resistance_mutation.1==F & putative_resistance_mutation.2==F,]
+d$important.1 <- d$hotspot.1==T | d$oncogenic.1 %in% c('Oncogenic','Likely Oncogenic','Predicted Oncogenic') | (d$Role %in% c('TSG','Oncogene/TSG') & d$truncating.1==T)
+d$important.2 <- d$hotspot.2==T | d$oncogenic.2 %in% c('Oncogenic','Likely Oncogenic','Predicted Oncogenic') | (d$Role %in% c('TSG','Oncogene/TSG') & d$truncating.2==T)
+dd <- d[important.1==T | important.2==T,]
+dd <- extract_cis_trans(dd)
+
+## get the number of patients with cis or trans compounds in each gene
+quantify_gene <- function(d) {
+    cis_unique_samples <- length(unique(strtrim(d$Tumor_Sample_Barcode[d$phase=='cis'],9)))
+    trans_unique_samples <- length(unique(strtrim(d$Tumor_Sample_Barcode[d$phase=='trans'],9)))
+    list(n.cis=cis_unique_samples,n.trans=trans_unique_samples)
+}
+result <- dd[,quantify_gene(.SD),by=c('Hugo_Symbol','Role')]
+result$percent_trans <- result$n.trans / (result$n.cis + result$n.trans)
+result$percent_cis <- 1 - result$percent_trans
+result <- result[order(percent_cis,decreasing=T),]
+result$total_phaseable <- result$n.cis + result$n.trans
+result <- result[total_phaseable >= 5,]
+
+## exclude genes depleted for compounds as these are likely passengers
+result <- result[!Hugo_Symbol %in% dat_genes_depleted_for_compounds$Hugo_Symbol, ]
+
+## show results for oncogenes with decreasing cis proportion
+result[Role=='Oncogene']
+
+## show results for TP53
+result[Hugo_Symbol=='TP53']
+
+```
+
+
+### Paragraph 9
+
+#### Residues enriched for compound mutations
+```{r,echo=T}
+    d <- fread(here('data/precalculated_residue_enrichment.txt'))
+    length(unique(d$query_mutation[d$q.value.enriched < 0.01])) 
+```
+
+#### Genes with any enriched for compound mutations
+```{r,echo=T}
+    length(unique(d$query_gene[d$q.value.enriched < 0.01])) 
+```
+
+#### Percentage of enriched mutations among TP53, PIK3CA, APC, and EGFR
+```{r,echo=T}
+    genes <- c('TP53','PIK3CA','APC','EGFR')
+    x <- d[q.value.enriched < 0.01]    
+    round(100*sum(x$query_gene %in% genes) / nrow(x), 3)
+```
+
+#### Percentage of enriched mutations that are also hotspots
+```{r,echo=T}
+    enriched_residues <- x$query_mutation
+    sum(x$hotspotid!='')/nrow(x) ## hotspotid are from 24K analysis
+```
+
+#### PIK3CA residues enriched for compounds are almost always in cis, and always arise as missense mutations
+```{r, echo=T}
+tmp <- x[query_gene=='PIK3CA']
+tmp <- tmp[order(q.value.enriched,decreasing=F),]
+out <- tmp[,c('query_mutation','n_cis','n_trans','q.value.enriched'),with=F]
+
+dd <- d_phased[exclude==F & Hugo_Symbol=='PIK3CA', c('Tumor_Sample_Barcode','tm.1','tm.2','Variant_Classification.1','Variant_Classification.2'),with=F]
+dd1 <- dd[,c('Tumor_Sample_Barcode','tm.1','Variant_Classification.1'),with=F]
+dd2 <- dd[,c('Tumor_Sample_Barcode','tm.2','Variant_Classification.2'),with=F]
+names(dd1) <- c('Tumor_Sample_Barcode','tm','Variant_Classification')
+dd1$allele <- 1
+names(dd2) <- c('Tumor_Sample_Barcode','tm','Variant_Classification')
+dd2$allele <- 2
+dd <- rbind(dd1, dd2)
+dd <- dd[tm %in% tmp$query_mutation,]
+get_prop_missense <- function(dd) {
+    n_mutants <- length(unique(strtrim(dd$Tumor_Sample_Barcode,9)))
+    n_missense_mutants <- length(unique(strtrim(dd$Tumor_Sample_Barcode[dd$Variant_Classification=='Missense_Mutation'],9)))
+    percentage_missense <- n_missense_mutants / n_mutants
+    list(percentage_missense=percentage_missense)
+}
+res <- dd[,get_prop_missense(.SD),by=tm]
+setnames(res,'percentage_missense','% Missense')
+out <- merge(out, res, by.x='query_mutation', by.y='tm', all.x=T)
+setnames(out,'query_mutation','Residue')
+setnames(out,'q.value.enriched','Q-value')
+out <- out[order(`Q-value`,decreasing=F),]
+out
+```
+
+
+
+
+### Paragraph 10
+
+#### Percentage of mutations including common TERT promoter variants that are compound
+
+```{r, echo=T}
+d <- d_mutations
+d <- d[Hugo_Symbol=='TERT' & Variant_Classification=='TERT promoter' & exclude==F,]
+get_tert_mutation <- function(Start_Position,Reference_Allele,Tumor_Seq_Allele2) {
+    Amino_Acid_Position <- as.integer(substr(Start_Position,5,7))
+    Reference_Allele <- toupper(Reference_Allele)
+    Tumor_Seq_Allele2 <- toupper(Tumor_Seq_Allele2)
+    mutation <- paste0(Amino_Acid_Position,'[',Reference_Allele,'>',Tumor_Seq_Allele2,']')
+    mutation
+}
+d$mutation <- get_tert_mutation(d$Start_Position, d$Reference_Allele, d$Tumor_Seq_Allele2)
+mutations <- unique(d$mutation)
+
+getN <- function(query.mutation, d) {
+    mutant_samples <- d$Tumor_Sample_Barcode[d$mutation==query.mutation]
+    samples_with_mutation <- d$Tumor_Sample_Barcode[d$Tumor_Sample_Barcode %in% mutant_samples]
+    tbl <- table.freq(samples_with_mutation)
+    compound_samples <- tbl$value[tbl$N > 1]
+    singleton_samples <- tbl$value[tbl$N == 1]
+    n_compound <- length(unique(strtrim(compound_samples, 9)))
+    n_singleton <- length(unique(strtrim(singleton_samples, 9)))
+    n_overall <- length(unique(strtrim(tbl$value, 9)))
+    list(mutation=query.mutation,n_compound=n_compound, n_singleton=n_singleton, n_overall=n_overall)
+}
+l <- lapply(mutations, getN, d)
+l <- rbindlist(l)
+info <- l[order(n_overall,decreasing=T),]
+info <- info[n_overall >= 5,]
+info$`Percentage as compounds` <- round(100*info$n_compound / info$n_overall,3)
+info[,n_singleton:=NULL]
+info$mutation <- paste('TERT',info$mutation)
+info
+```
+
+
+### Methods
+
+#### Number of distinct cancer subtypes
+```{r, echo=T}
+length(unique(d_clinical$CANCER_TYPE))
+```
+
+#### Number of samples in TCGA data
+```{r, echo=T}
+length(unique(d_clinical_tcga$Tumor_Sample_Barcode))
+```
 
 
 
