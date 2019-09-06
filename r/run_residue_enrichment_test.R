@@ -1,17 +1,9 @@
+## This script will test individually recurrent variants in the mutation data
+## for enriched or depleted incidence as part of a compound mutation.
+## It will generate the file: data/residue_enrichment.txt
 
-source(here('r/prerequisites.R'))
-d_mutations <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','exclude','Hugo_Symbol','Role','putative_resistance_mutation',
-                                                              'Variant_Classification','Variant_Type','tcn', 'mutationid', 'high_tmb','hotspot_class',
-                                                              'tm','hotspotid','HGVSp_Short','truncating'))
-d_phased <- fread(here('data/data_mutations_phased.txt'))
-d_phased$id <- paste(d_phased$mutationid.1,d_phased$mutationid.2,sep=' + ')
-d_phased <- d_phased[!duplicated(id),]
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# for recurrently mutated variants, test each for enriched/depleted 
-# incidence as part of a compound
-# Add in the number of times each variant arose in cis/trans/etc
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+source(here::here('r/prerequisites.R'))
 
 
 test_mutation <- function(query_mutation,dd) {
@@ -82,13 +74,20 @@ test_mutation <- function(query_mutation,dd) {
 }
 
 
-## load mutation data, subset for sample/genes not in phasing data, merge with phasing data
+## load/format mutation data
+d_mutations <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','exclude','Hugo_Symbol','Role','putative_resistance_mutation',
+                                                              'Variant_Classification','Variant_Type','tcn', 'mutationid', 'high_tmb','hotspot_class',
+                                                              'tm','hotspotid','HGVSp_Short','truncating'))
 d <- d_mutations
 d[hotspotid!='',tm:=hotspotid] ## in cases of INDEL hotspots, group mutation IDs together into the hotspot cluster
 d[Variant_Classification=='TERT promoter', tm:=paste('TERT',gsub('p[.]','',HGVSp_Short))]
 d <- d[,c('Tumor_Sample_Barcode','Hugo_Symbol','tm','putative_resistance_mutation','mutationid','exclude','truncating','hotspotid','Variant_Classification'),with=F]
 
-## annotate the rate of cis/trans compounds with each mutation in the table
+
+## load/format phasing data
+d_phased <- fread(here('data/data_mutations_phased.txt'))
+d_phased$id <- paste(d_phased$mutationid.1,d_phased$mutationid.2,sep=' + ')
+d_phased <- d_phased[!duplicated(id),]
 phased <- d_phased
 phased[hotspotid.1!='',tm.1:=hotspotid.1]
 phased[hotspotid.2!='',tm.2:=hotspotid.2]
@@ -99,6 +98,8 @@ phased <- melt(phased,id.var='phase')
 phased[,variable:=NULL]
 setnames(phased,'value','mutationid')
 
+
+## annotate the rate of cis/trans compounds with each mutation in the table
 ## annotate phase of all mutations (NB: a single mutation in a sample with 3+ mutations in compound can have multiple phases)
 annotate_phases_of_variant <- function(query.mutationid,phased) {
     phased <- phased[mutationid==query.mutationid,]
@@ -119,7 +120,6 @@ annotate_phases_of_variant <- function(query.mutationid,phased) {
     }
     list(mutationid=query.mutationid, cis=cis, trans=trans, trans_or_separate_cells=trans_or_separate_cells, ambiguous=ambiguous, unknown=unknown, not_phased=not_phased)
 }
-
 l <- mclapply(d$mutationid, annotate_phases_of_variant, phased, mc.cores=14)
 ll <- rbindlist(l)
 d <- merge(d, ll, by='mutationid', all.x=T)
@@ -128,16 +128,19 @@ resistance_mutations <- unique(d$tsbgene[d$putative_resistance_mutation==T])
 d <- d[exclude==F,]
 d <- d[tsbgene %nin% resistance_mutations,]
 
+
 ## annotate compounds (including the phased and not-phased)
 tbl <- table.freq(d$tsbgene)
 d <- merge(d, tbl, by.x='tsbgene', by.y='value', all.x=T)
 d$compound <- d$N > 1
 d[,N:=NULL]
 
+
 ## annotate non-compounds as NA for not phased
 d[compound==F,not_phased:=NA]
 
-## test SNP residues mutated in 5+ patients
+
+## test SNP residues and in-frame INDELS mutated in 5+ patients
 tmp <- d[,c('tm','Tumor_Sample_Barcode'),with=F]
 tmp$pid <- strtrim(tmp$Tumor_Sample_Barcode,9)
 summarize_tm <- function(d) {
@@ -146,14 +149,15 @@ summarize_tm <- function(d) {
 }
 info <- tmp[,summarize_tm(.SD),by=tm]
 test_mutations <- info$tm[info$n_pts >= 5]
-
 l <- mclapply(test_mutations, test_mutation, d, mc.cores=14)
 ll <- rbindlist(l)
 ll <- ll[order(p.value.enriched,decreasing=F),]
 ll$q.value.enriched <- p.adjust(ll$p.value.enriched,method='BH')
 ll$q.value.two.sided <- p.adjust(ll$p.value.two.sided,method='BH')
-ll[,hotspotid:=NULL]
 ll <- merge(ll, d[!duplicated(tm),c('tm','hotspotid'),with=F], by.x='query_mutation', by.y='tm', all.x=T)
+
+
+## save result
 write.tsv(ll,here('data/residue_enrichment.txt'))
 
 

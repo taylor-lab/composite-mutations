@@ -221,6 +221,10 @@ gg_qqplot <- function(xs, labels=NULL, ci=0.95, show.lambda=T) {
     p
 }
 
+## shortcut to write tab-delimited data with consistent format 
+write.tsv <- function(d, file, sep = "\t", quote = F, row.names = F, ...) {
+    write.table(d, file = file, sep = sep, quote = quote, row.names = row.names, ...)
+}
 
 ## shortcut for as.data.table
 adt <- function(d) as.data.table(d)
