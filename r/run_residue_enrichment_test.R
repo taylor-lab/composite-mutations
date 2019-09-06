@@ -147,13 +147,13 @@ summarize_tm <- function(d) {
 info <- tmp[,summarize_tm(.SD),by=tm]
 test_mutations <- info$tm[info$n_pts >= 5]
 
-l <- mclapply(test_mutations, test_mutation, d, mc.cores=4)
+l <- mclapply(test_mutations, test_mutation, d, mc.cores=14)
 ll <- rbindlist(l)
 ll <- ll[order(p.value.enriched,decreasing=F),]
 ll$q.value.enriched <- p.adjust(ll$p.value.enriched,method='BH')
 ll$q.value.two.sided <- p.adjust(ll$p.value.two.sided,method='BH')
 ll[,hotspotid:=NULL]
 ll <- merge(ll, d[!duplicated(tm),c('tm','hotspotid'),with=F], by.x='query_mutation', by.y='tm', all.x=T)
-write.tsv(ll,here('data/precalculated_residue_enrichment.txt'))
+write.tsv(ll,here('data/residue_enrichment.txt'))
 
 

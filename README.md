@@ -1,28 +1,48 @@
 # compound-mutations
 
 Companion code to the paper: \
-**_add_title_**
+**__Pervasive compound oncogenic mutations in cancer__**
 
 Code in this repository can be used to recreate the essential parts of the main figures in the manuscript. All code is in R.
 
-### Instructions (template from BRCA)
+### Instructions
 Install required R packages:
 ```r
-install.packages(c('package1','package2'))
+install.packages(c('data.table','ggplot2','cowplot','RColorBrewer','parallel','ggsignif','binom','scales','MASS','ggrepel','here','Hmisc'))
+```
+Download RNA-Seq count file GSE136295_FSR_RNAseq.featureCounts.cnt.csv.gz from [GEO](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE136295) (requires secure token until Aug 23, 2020).
+
+Extract compressed datasets in the `data/` directory:
+```shell
+gunzip data/data_mutations.txt.gz
+gunzip data/data_mutations_phased.txt.gz
+gunzip data/data_mutations_tcga.txt.gz
+gunzip data/GSE136295_FSR_RNAseq.featureCounts.cnt.csv.gz
 ```
 
-Get supplementary data from manuscript and download germline data from [dbGaP](https://www.ncbi.nlm.nih.gov/projects/gap/cgi-bin/study.cgi?study_id=phs001858.v1.p1).
+Several datasets used in this manuscript can take multiple hours to run. For convenience, precalculated results from these tests are available in the `data/` directory. These can be regenerated with the following commands:
+```shell
+Rscript r/run_residue_enrichment_test.R                 ## generates data/residue_enrichment.txt
+Rscript r/run_compound_rate_permutation_test.R          ## generates data/observed_vs_expected_compounds_impact.rds
+Rscript r/run_compound_rate_permutation_test_per_tmb.R  ## generates data/observed_vs_expected_compounds_impact_per_tmb.rds
+```
 
-Place these in the `data` folder, with the names `Taylor_SItables.xlsx`, `germline_mutations.maf`, and `germline_cnvs.txt`, or manually enter the file paths in the `prerequisites.R` script in the `r` directory.
-
-An HTML file containing the figures can be generated from the command-line for each main figure as such:
+HTML files containing the figures can be generated from the command-line for each main figure as such:
 ```shell
 R -e "rmarkdown::render('r/figure-1.Rmd', output_file = 'figure-1.html')"
+R -e "rmarkdown::render('r/figure-2.Rmd', output_file = 'figure-2.html')"
+R -e "rmarkdown::render('r/figure-3.Rmd', output_file = 'figure-3.html')"
+R -e "rmarkdown::render('r/figure-4.Rmd', output_file = 'figure-4.html')"
+```
+
+An HTML file containing values references in the main text can also be generated:
+```shell
+R -e "rmarkdown::render('r/text_values.Rmd', output_file = 'text_values.html')"
 ```
 
 ### Citation
-- URL: 
-- DOI: 
+- URL: **pending** 
+- DOI: **pending**
 
 ### Contact
 E-mail any questions to [gorelica@mskcc.org](mailto:gorelica@mskcc.org?subject=[GitHub]%20Compound-Mutations%20paper).
