@@ -1,0 +1,653 @@
+---
+title: "Figure 3"
+output: html_document
+chunk_output_type: console
+---
+
+```{r setup, include = FALSE, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, autodep = knitr::dep_prev())
+source(here::here('r/prerequisites.R'))
+
+#d_clinical <- fread(here('data/data_clinical.txt'))
+
+## load starting datasets
+#d_mutations <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','PATIENT_ID','exclude','Hugo_Symbol','Role','putative_resistance_mutation',
+#                                                              'Variant_Classification','Variant_Type','tcn', 'mutationid', 'high_tmb','hotspot_class',
+#                                                              'tm','hotspotid','HGVSp_Short','truncating','Reference_Allele','Tumor_Seq_Allele2',
+#                                                              'Start_Position','End_Position'))
+
+#d_clinical_tcga <- fread(here('data/data_clinical_tcga.txt'))
+#d_mutations_tcga <- fread(here('data/data_mutations_tcga.txt'),select=c('Tumor_Sample_Barcode','Hugo_Symbol'))
+#gene_info <- fread(here('data/gene_info.txt'))
+
+## load phasing data and exclude duplicates from phasing data
+d_phased <- fread(here('data/data_mutations_phased.txt'))
+d_phased$id <- paste(d_phased$mutationid.1,d_phased$mutationid.2,sep=' + ')
+d_phased <- d_phased[!duplicated(id),]
+
+```
+
+----------
+
+### Panel A
+
+The allelic configuration (phase) of compound mutations by the type of mutation and affected cancer gene. 
+
+```{r Panel A, fig.width=6,fig.height=8}
+
+## load phased data (using the pairwise-combos)
+d <- d_phased
+d <- d[exclude==F & putative_resistance_mutation.1==F & putative_resistance_mutation.2==F,]
+d$Class <- ''
+d[truncating.1==F & truncating.2==F,Class:='Non-trunc/Non-trunc']
+d[(truncating.1==T & truncating.2==F | truncating.1==F & truncating.2==T),Class:='Non-trunc/Trunc']
+d[truncating.1==T & truncating.2==T,Class:='Trunc/Trunc']
+
+## don't overcount 3+ mutation compound-mutations; using unique sample/gene/Class counts
+d$id <- paste(d$Tumor_Sample_Barcode, d$Hugo_Symbol, d$Class, d$phase)
+dd <- d
+dd <- dd[!duplicated(id),c('Tumor_Sample_Barcode','Hugo_Symbol','Class','Role','phase','id'),with=F]
+
+## format the Classes: Oncogene/nontrunc/nontrunc vs TSG (3 categories)
+dd$Class <- paste0(dd$Role,' (',dd$Class,')')
+dd <- dd[Role=='TSG' | Class %in% c('Oncogene (Non-trunc/Non-trunc)'),]
+class_levels <- sortunique(dd$Class)
+dd$Class <- factor(dd$Class,levels=class_levels)
+dd$phase <- factor(dd$phase,levels=c('cis','trans'))
+
+## tabulate phase vs class
+dat <- as.data.frame.matrix(xtabs(~Class + phase,data=dd))
+dat <- cbind(Class=rownames(dat),adt(dat))
+dat$Class <- factor(dat$Class,levels=dat$Class)
+dat$prop_cis <- dat$cis / (dat$cis + dat$trans)
+dat$prop_trans <- 1 - dat$prop_cis
+ci <- binom::binom.confint(x=dat$trans,n=(dat$cis+dat$trans),method='exact')
+dat$lwr <- ci$lower
+dat$upr <- ci$upper
+
+## get pairwise combinations for calculating p-values
+m <- dat[,c('Class','cis','trans'),with=F]
+m2 <- adt(expand.grid(m$Class,m$Class))
+m2$i <- 1:nrow(m2)
+m2$Var1 <- as.character(m2$Var1)
+m2$Var2 <- as.character(m2$Var2)
+f <- function(i,m) {
+    m <- m[i,]
+    sorted <- sort(c(m$Var1,m$Var2))
+    m$Var1 <- sorted[1]
+    m$Var2 <- sorted[2]
+    m
+}
+m2 <- rbindlist(lapply(1:nrow(m2), f, m2))
+m2 <- m2[Var1 != Var2,]
+m2$Var1 <- as.character(m2$Var1)
+m2$Var2 <- as.character(m2$Var2)
+m2$id <- paste(m2$Var1,m2$Var2)
+m2 <- m2[!duplicated(id),]
+m3 <- merge(m2, m,by.x='Var1', by.y='Class', all.x=T)
+m3 <- merge(m3, m,by.x='Var2', by.y='Class', all.x=T)
+
+## calculate pvalues
+getp <- function(i,m3) {
+    tmp <- m3[i,]
+    mat <- rbind(
+                 c(tmp$cis.x,tmp$trans.x),
+                 c(tmp$cis.y,tmp$trans.y)
+                 )
+    tst <- fisher.test(mat,alternative='two.sided')
+    tmp$p <- tst$p.value
+    tmp
+}
+m4 <- rbindlist(lapply(1:nrow(m3), getp, m3))
+m4$plab <- paste0('p=',prettyNum(m4$p,digits=1))
+m4$Var1 <- as.character(m4$Var1)
+m4$Var2 <- as.character(m4$Var2)
+
+## prep data for plotting
+dat1 <- dat[,c('Class','prop_cis','prop_trans'),with=F]
+dat1 <- melt(dat1,id.var='Class')
+dat1$variable <- ifelse(dat1$variable=='prop_cis','Cis','Trans')
+dat1$variable <- factor(dat1$variable,levels=c('Cis','Trans'))
+dat2 <- dat[,c('Class','lwr'),with=F]
+dat2 <- melt(dat2,id.var='Class')
+dat3 <- dat[,c('Class','upr'),with=F]
+dat3 <- melt(dat3,id.var='Class')
+dat23 <- merge(dat2,dat3,by='Class')
+dat23[,c('variable.x','variable.y'):=NULL]
+names(dat23) <- c('Class','lwr','upr')
+dat23$variable <- 'Trans'
+dat1 <- merge(dat1,dat23,by=c('Class','variable'),all.x=T)
+dat1$variable <- factor(dat1$variable,levels=c('Cis','Trans'))
+dat1$value <- 100*dat1$value
+dat1$lwr <- 100*dat1$lwr
+dat1$upr <- 100*dat1$upr
+
+## plot
+cols <- colors$barplot2col
+names(cols) <- c('Trans','Cis')
+p <- ggplot(dat1, aes(x=Class,y=value)) +
+    geom_bar(stat='identity',aes(fill=variable)) +
+    geom_errorbar(aes(min=lwr,max=value),color='white',width=0,size=0.5) +
+    geom_errorbar(aes(min=value,max=upr),color='black',width=0,size=0.5) +
+    scale_fill_manual(values=cols,name='Phase') +
+    scale_y_continuous(expand=c(0,0),breaks=seq(0,100,by=25),limits=c(0,150)) +
+    labs(x=NULL,y='% phaseable compound mutants',title=NULL) +
+    theme_std(base_size=14) +
+    #annotate(geom = "segment", x=0, xend = 0, y = 0, yend = 100, size=1)+
+    theme(legend.position='right',axis.text.x=element_text(angle=90,hjust=1,vjust=0.5),axis.line.y = element_blank()) 
+
+## add comparison p-values
+for(a in 1:nrow(m4)) p <- p + geom_signif(comparisons=list(c(m4$Var1[a],m4$Var2[a])),annotations=m4$plab[a],y=(100+(50*a/7.5)),tip_length=0.0075,size=0.25)
+p
+
+```
+
+----------
+
+### Panel B
+
+The phase of compound mutations mediating acquired resistance to molecularly targeted therapy compared to all others.
+
+```{r, Panel B,fig.width=3,fig.height=5}
+
+## define helper functions here
+extract_cis_trans <- function(d) {
+    ## don't overcount multiple pairs of compound mutations in the same sample+gene+phase
+    d$id <- paste(d$Tumor_Sample_Barcode,d$Hugo_Symbol,d$phase)
+
+    ## don't overcount 3+ mutation compound-mutations; using unique sample/gene/Class counts
+    d <- d[!duplicated(id),c('Tumor_Sample_Barcode','metamaintype','Hugo_Symbol','Role','phase','id',
+                             'putative_resistance_mutation.1','putative_resistance_mutation.2',
+                             'HGVSp_Short.1','HGVSp_Short.2',
+                             'ccf_Mcopies.1','clonal.1','ccf_Mcopies.2','clonal.2','common_reads_alt1_alt2',
+                             'common_reads_alt1_ref2','common_reads_ref1_alt2','common_reads_ref1_ref2',
+                               't_depth.1','t_depth.2'),with=F]
+    d
+}
+
+label_compound <- function(d) {
+    label <- ''
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='Exon 19 INDELs' & d$HGVSp_Short.2=='T790M'))  label <- 'EGFR Exon 19 INDELs + T790M'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='T790M' & d$HGVSp_Short.2=='L858R'))  label <- 'EGFR L858R + T790M'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='D761Y' & d$HGVSp_Short.2=='T790M'))  label <- 'EGFR D761Y + T790M'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='G719A' & d$HGVSp_Short.2=='T790M'))  label <- 'EGFR G719A + T790M'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='T790M' & d$HGVSp_Short.2=='C797S'))  label <- 'EGFR T790M + C797S'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='Exon 19 INDELs' & d$HGVSp_Short.2=='C797S'))  label <- 'EGFR Exon 19 INDELs + C797S'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='C797S' & d$HGVSp_Short.2=='L858R'))  label <- 'EGFR L858R + C797S'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='D761Y' & d$HGVSp_Short.2=='C797S'))  label <- 'EGFR D761Y + C797S'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='G719A' & d$HGVSp_Short.2=='C797S'))  label <- 'EGFR G719A + C797S'
+    if(d$Hugo_Symbol=='AR' &   (d$HGVSp_Short.1=='L702H'  & d$HGVSp_Short.2=='H875Y'))  label <- 'AR L702H + H875Y'
+    if(d$Hugo_Symbol=='ALK' &  (d$HGVSp_Short.1=='D1203N' & d$HGVSp_Short.2=='L1196M')) label <- 'ALK D1203N + L1196M'
+    if(d$Hugo_Symbol=='ALK' &  (d$HGVSp_Short.1=='G1202R' & d$HGVSp_Short.2=='L1196M')) label <- 'ALK G1202R + L1196M'
+    if(d$Hugo_Symbol=='BRCA1' &  (d$HGVSp_Short.1=='E1257Gfs*9' & d$HGVSp_Short.2=='N1235Tfs*18')) label <- 'BRCA1 Frame-restoring INDELs'
+    if(label=='')  label <- paste(d$Hugo_Symbol,d$HGVSp_Short.1,'+',d$HGVSp_Short.2)
+    d$label <- label
+    d
+}
+
+collapse <- function(info_RM) {
+    ncis <- info_RM$n[info_RM$phase=='cis']
+    ncis2 <- info_RM$n[info_RM$phase=='cis*']
+    ntrans <- info_RM$n[info_RM$phase=='trans']
+    list(ncis=ncis, ncis2=ncis2, ntrans=ntrans)
+}
+
+summarize_compound_with_alleles <- function(d) {
+    n <- length(unique(strtrim(d$Tumor_Sample_Barcode,9)))
+    list(n=n)
+}
+
+quantify_gene <- function(d) {
+    ## count the instances of cis/trans per gene
+    cis_unique_samples <- length(unique(strtrim(d$Tumor_Sample_Barcode[d$phase=='cis'],9)))
+    trans_unique_samples <- length(unique(strtrim(d$Tumor_Sample_Barcode[d$phase=='trans'],9)))
+    list(n.cis=cis_unique_samples,n.trans=trans_unique_samples)
+}
+
+## load phased data, add phasing by LOH with FACETS and manual review
+d <- d_phased
+d <- d[exclude==F & (putative_resistance_mutation.1==T | putative_resistance_mutation.2==T),]
+vaf.1 <- binom.confint(d$t_alt_count.1,d$t_depth.1,method='exact')
+vaf.2 <- binom.confint(d$t_alt_count.2,d$t_depth.2,method='exact')
+d$vaf.1 <- vaf.1$mean
+d$vaf_lwr.1 <- vaf.1$lower
+d$vaf_upr.1 <- vaf.1$upper
+d$vaf.2 <- vaf.2$mean
+d$vaf_lwr.2 <- vaf.2$lower
+d$vaf_upr.2 <- vaf.2$upper
+d$same_vaf <- T
+d[vaf_lwr.1 > d$vaf_upr.2 | vaf_upr.1 < vaf_lwr.2,same_vaf:=F]
+
+reviewed <- fread(here('data/resistance_mutation_phasing_reviewed.txt'))
+reviewed <- reviewed[,c('Tumor_Sample_Barcode','Hugo_Symbol','HGVSp_Short.1','HGVSp_Short.2','phase_reviewed'),with=F]
+d <- merge(d, reviewed[,c('Tumor_Sample_Barcode','Hugo_Symbol','HGVSp_Short.1','HGVSp_Short.2','phase_reviewed'),with=F],
+           by=c('Tumor_Sample_Barcode','Hugo_Symbol','HGVSp_Short.1','HGVSp_Short.2'),all.x=T)
+d[phase_reviewed %in% c('cis','cis*'),phase:=phase_reviewed]
+
+## exclude these compound mutations for stated reasons
+to_remove <- c(
+               ## bad facets fit in this sample, we can't be sure variants are in the same cell: exclude
+               which(d$Tumor_Sample_Barcode=='P-0013110-T01-IM5' & d$tm.1=='KIT C809' & d$tm.2=='KIT indel:820-821'),
+               ## this sample has EGFR S768 cis with EGFR T790, but both are in trans with a passenger C775, so I am removing the passenger compound
+               which(d$Tumor_Sample_Barcode=='P-0003923-T01-IM5' & d$tm.1=='EGFR C775' & d$tm.2=='EGFR T790'),
+               which(d$Tumor_Sample_Barcode=='P-0003923-T01-IM5' & d$tm.1=='EGFR S768' & d$tm.2=='EGFR C775'))
+d <- d[-to_remove,]
+
+## collapse in-frame INDEL mutation labels to just the exon of the INDEL
+d$HGVSp_Short.1 <- gsub('p[.]','',d$HGVSp_Short.1)
+d$HGVSp_Short.2 <- gsub('p[.]','',d$HGVSp_Short.2)
+d[Variant_Classification.1 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol=='EGFR' & Exon_Number.1=='19/28',HGVSp_Short.1:=paste('Exon 19 INDELs')]
+d[Variant_Classification.1 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol=='EGFR' & Exon_Number.1=='20/28',HGVSp_Short.1:=paste('Exon 20 INDELs')]
+d[Variant_Classification.2 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol=='EGFR' & Exon_Number.2=='19/28',HGVSp_Short.2:=paste('Exon 19 INDELs')]
+d[Variant_Classification.2 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol=='EGFR' & Exon_Number.2=='20/28',HGVSp_Short.2:=paste('Exon 20 INDELs')]
+d[Variant_Classification.1 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol=='KIT' & Exon_Number.1=='11/21',HGVSp_Short.1:=paste('Exon 11 INDELs')]
+d[Variant_Classification.2 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol=='KIT' & Exon_Number.2=='11/21',HGVSp_Short.2:=paste('Exon 11 INDELs')]
+d <- d[phase %in% c('cis','cis*','trans'),]
+d$id <- paste(strtrim(d$Tumor_Sample_Barcode,9),d$Hugo_Symbol,d$HGVSp_Short.1,d$HGVSp_Short.2,d$phase)
+d <- d[!duplicated(id),]
+
+## format resistance mutation data for plot
+dd <- extract_cis_trans(d)
+dd <- dd[order(Tumor_Sample_Barcode,Hugo_Symbol),]
+dd$i <- 1:nrow(dd)
+dd <- dd[,label_compound(.SD),by=i]
+
+## these samples have bona fide EGFR resistance mutation with 2+ other EGFR mutations, but the resistance mutation was not phaseable with any, so exclude them
+toremove <- which(dd$Hugo_Symbol=='EGFR' & (grepl('T790M',dd$label)==F & grepl('C797S',dd$label)==F))
+dd <- dd[-toremove,]
+
+## Exclude ESR1 resistance mutations because ESR1 there is no initial ESR1 drug target
+dd <- dd[Hugo_Symbol!='ESR1',]
+info <- dd[,summarize_compound_with_alleles(.SD),by=c('Hugo_Symbol','label','phase')]
+info <- info[phase %in% c('cis','cis*','trans'),]
+summarize_gene <- function(info) list(n=sum(info$n))
+ns <- info[,summarize_gene(.SD),by=Hugo_Symbol]
+ns <- ns[order(n,decreasing=T),]
+info$Hugo_Symbol <- factor(info$Hugo_Symbol, levels=ns$Hugo_Symbol)
+info <- info[order(info$Hugo_Symbol,info$n,decreasing=F),]
+info$label <- factor(info$label, levels=info$label)
+
+## prep similar data for non-resistance mutations
+d <- d_phased
+d <- d[exclude==F & (putative_resistance_mutation.1==F & putative_resistance_mutation.2==F),]
+dd <- extract_cis_trans(d)
+dd$id <- paste(strtrim(dd$Tumor_Sample_Barcode,9),dd$Hugo_Symbol,dd$HGVSp_Short.1,dd$HGVSp_Short.2,dd$phase)
+dd <- dd[!duplicated(id),]
+dd <- dd[order(Hugo_Symbol),]
+dd$i <- 1:nrow(dd)
+
+## merge resistance and non-resistance mutation data for plot
+tbl <- table.freq(dd$phase)
+tbl <- tbl[value %in% c('cis','trans'),]
+names(tbl) <- c('phase','N')
+tbl$group <- 'Rest'
+tbl_rm <- data.table(phase=c('cis','trans'),N=c(sum(info$n[info$phase=='cis']),0),group='Resistance')
+dat <- rbind(tbl, tbl_rm)
+m0 <- as.data.frame(reshape(dat,idvar='group',timevar='phase',direction='wide'))
+m <- m0
+names(m) <- gsub('N[.]','',names(m))
+m$cis <- m$cis / c(m$cis + m$trans)
+m$trans <- 1-m$cis
+m <- melt(m, id.var='group')
+names(m) <- c('group','phase','prop')
+m$prop <- 100*m$prop
+m$phase <- factor(m$phase, levels=c('cis','trans'))
+m0$group <-  NULL
+names(m0) <- gsub('N[.]','',names(m0))
+pval <- fisher.test(m0)$p.value
+pval_label <- paste0('p=',round(pval,2))
+m$group <- factor(m$group, levels=c('Rest','Resistance'))
+
+## plot
+cols <- colors$barplot2col
+names(cols) <- c('trans','cis')
+labels <- m[m$phase=='trans',]
+labels$label <- paste0(round(labels$prop),'%')
+
+p <- ggplot(m, aes(x=group, y=prop, group=phase)) +
+    geom_bar(stat='identity',aes(fill=phase)) +
+    geom_text(data=labels,aes(label=label),angle=0,vjust=-0.5) +
+    scale_fill_manual(values=cols, name='Phase') +
+    geom_signif(comparisons=list(c('Resistance','Rest')),annotations=pval_label,y_position=105,tip_length=0.01) +
+    theme_std(base_size=14) +
+    theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) + 
+    scale_y_continuous(expand=c(0,0),limits=c(0,110)) +
+    labs(x=NULL,y='% compound muts')
+p
+```
+
+----------
+
+### Panel C
+
+The phase of recurrent compound mutations (comprising known or predicted functional mutations, 10+ phase-able tumors) in individual cancer genes (top, oncogenes; bottom, TSGs). 
+
+```{r, Panel C}
+
+
+plot_phased <- function(res,min_phaseable=3,title='') {
+    include_genes <- res$Hugo_Symbol[res$total_phaseable>=min_phaseable]
+    plot_dat_prop <- res[Hugo_Symbol %in% include_genes,c('Role','Hugo_Symbol','percent_cis','percent_trans'),with=F]
+    plot_dat_prop <- melt(plot_dat_prop,id.var=c('Hugo_Symbol','Role'))
+    plot_dat_prop$variable <- gsub('percent_','',plot_dat_prop$variable)
+    plot_dat_prop$Hugo_Symbol <- factor(plot_dat_prop$Hugo_Symbol,levels=rev(include_genes))
+
+    plot_dat_freq <- res[Hugo_Symbol %in% include_genes,c('Role','Hugo_Symbol','n.cis','n.trans'),with=F]
+    plot_dat_freq <- melt(plot_dat_freq,id.var=c('Hugo_Symbol','Role'))
+    plot_dat_freq$variable <- gsub('n[.]','',plot_dat_freq$variable)
+    plot_dat_freq$Hugo_Symbol <- factor(plot_dat_freq$Hugo_Symbol,levels=rev(include_genes))
+
+    plot_dat <- merge(plot_dat_prop, plot_dat_freq, by=c('Role','Hugo_Symbol','variable'), all=T)
+    names(plot_dat) <- c('Role','Gene','Phase','Prop','Freq')
+
+    tmp <- res[,c('Role','Hugo_Symbol','percent_trans','percent_cis'),with=F]
+    tmp$cis_pos <- tmp$percent_trans + (tmp$percent_cis)/2
+    tmp$trans_pos <- tmp$percent_trans/2
+    tmp <- tmp[,c('Role','Hugo_Symbol','cis_pos','trans_pos'),with=F]
+    tmp <- melt(tmp,id.var=c('Role','Hugo_Symbol'))
+    tmp$variable <- gsub('_pos','',tmp$variable)
+    names(tmp) <- c('Role','Gene','Phase','position')
+
+    plot_dat <- merge(plot_dat, tmp, by=c('Role','Gene','Phase'), all=T)
+    plot_dat <- plot_dat[!is.na(Prop),]
+    plot_dat[Freq==0,Freq:=NA]
+
+    tmp <- plot_dat[Phase=='cis',]
+    tmp$Role <- factor(tmp$Role, levels=rev(c('Oncogene','TSG')))
+    tmp <- tmp[order(Role,Prop,Freq,decreasing=T),]
+    gene_order <- rev(tmp$Gene)
+    plot_dat$Gene <- factor(plot_dat$Gene,levels=gene_order)
+
+    cols <- colors$barplot2col
+    names(cols) <- c('trans','cis')
+    text_col <- c('black','white')
+    names(text_col) <- c('cis','trans')
+    labels <- res[Hugo_Symbol %in% plot_dat$Gene,c('Role','Hugo_Symbol','total_phaseable'),with=F]
+    setnames(labels,'Hugo_Symbol','Gene')
+    labels$Gene <- factor(labels$Gene, levels=gene_order)
+    role_colors <- colors$role
+
+    p1 <- ggplot(plot_dat,aes(x=Gene,y=Prop)) +
+        geom_bar(stat='identity',aes(fill=Phase),width=0.9) +
+        scale_x_discrete(expand=c(0,0)) +
+        scale_y_continuous(expand=c(0,0),position='right',labels=scales::percent) +
+        scale_color_manual(values=text_col) +
+        scale_fill_manual(values=cols) +
+        labs(x=NULL,y='Frac. of phase-able compound mutations',title=NULL,subtitle=title) +
+        theme_std(base_size=14) +
+        theme(axis.text.x=element_text(angle=0,vjust=0,hjust=1))
+    p1 <- extract_gglegend(p1)
+    p1.plot <- p1$plot + coord_flip()
+
+    p2 <- ggplot(labels,aes(x=Gene,y=1)) +
+        geom_tile(aes(fill=Role),width=0.9) +
+        scale_fill_manual(values=role_colors,name='Role') +
+        scale_x_discrete(expand=c(0,0)) +
+        scale_y_continuous(expand=c(0,0)) +
+        labs(x=NULL,y=NULL,title=NULL) +
+        theme_std(base_size=14) +
+        theme(
+              axis.line.x=element_blank(), axis.ticks.x=element_blank(), axis.text.x=element_blank(),
+              axis.line.y=element_blank(), axis.ticks.y=element_blank(), axis.text.y=element_blank()) +
+        coord_flip()
+    p2 <- extract_gglegend(p2)
+    p2.plot <- p2$plot + coord_flip()
+
+    y_info <- break_axis(labels$total_phaseable, maxlower=60, minupper=100, lowerticksize=20, upperticksize=100, ratio_lower_to_upper=3/4)
+    labels$newy <- y_info$newy
+    labels$label <- labels$total_phaseable
+    labels[Gene!='TP53',label:=NA]
+   p3 <- ggplot(labels,aes(x=Gene,y=newy)) +
+        geom_bar(stat='identity',width=0.9) +
+        geom_text(aes(label=label,x=Gene,y=newy+10)) +
+        scale_x_discrete(expand=c(0,0)) +
+        scale_y_continuous(expand=c(0,0), limits=y_info$limits,breaks=y_info$breaks, labels=y_info$labels) +
+        labs(x=NULL,y='N',title=NULL) +
+        theme_std(base_size=14) +
+        theme(axis.line.y=element_blank(), axis.ticks.y=element_blank(), axis.text.y=element_blank(),
+              axis.text.x=element_text(angle=-90,hjust=0,vjust=0.5)) +
+        coord_flip()
+
+    p <- plot_grid(p1.plot,p2.plot,p3,ncol=3,nrow=1,align='h',rel_widths=c(5,0.5,1))
+    p.legend <- plot_grid(p1$legend,p2$legend,ncol=2,nrow=1,rel_widths=c(1,1))
+    p <- plot_grid(p,p.legend,ncol=1,nrow=2,rel_heights=c(5,1))
+    p
+}
+
+
+d <- d_phased
+d <- d[exclude==F & putative_resistance_mutation.1==F & putative_resistance_mutation.2==F,]
+d$important.1 <- d$hotspot.1==T | d$oncogenic.1 %in% c('Oncogenic','Likely Oncogenic','Predicted Oncogenic') | (d$Role %in% c('TSG','Oncogene/TSG') & d$truncating.1==T)
+d$important.2 <- d$hotspot.2==T | d$oncogenic.2 %in% c('Oncogenic','Likely Oncogenic','Predicted Oncogenic') | (d$Role %in% c('TSG','Oncogene/TSG') & d$truncating.2==T)
+dd <- d[important.1==T | important.2==T,]
+dd <- extract_cis_trans(dd)
+result <- dd[,quantify_gene(.SD),by=c('Hugo_Symbol','Role')]
+result$percent_trans <- result$n.trans / (result$n.cis + result$n.trans)
+result$percent_cis <- 1 - result$percent_trans
+result <- result[order(percent_trans),]
+result$total_phaseable <- result$n.cis + result$n.trans
+result <- result[total_phaseable > 2,]
+result <- result[Role %in% c('Oncogene','TSG'),]
+
+## exclude genes with evidence for depletion for compounds
+gene_enrichment <- fread(here('data/gene_enrichment_precalculated.txt'))
+depleted <- gene_enrichment$Hugo_Symbol[gene_enrichment$q_twosided < 0.01 & gene_enrichment$logOR < 0]
+result <- result[Hugo_Symbol %nin% depleted,]
+
+## plot result
+p <- plot_phased(result,min_phaseable=10,title=NULL)
+p
+
+```
+
+----------
+
+### Panel D
+
+The pattern of TP53 compound mutations.
+
+```{r, Panel D, fig.width=8,fig.height=5}
+
+arcplot <- function(gene,dat,labels='',min.n=1) {
+
+    prepdata <- function(d) {
+        d$combo <- paste(d$Amino_Acid_Position.1,d$Amino_Acid_Position.2,sep=' + ')
+            count_samples <- function(d) {
+                ab <- length(unique(strtrim(d$Tumor_Sample_Barcode,9)))
+                list(ab=ab)
+            }
+        tbl <- d[,count_samples(.SD),by=combo]
+            info <- rbindlist(lapply(strsplit(as.character(tbl$combo),' [+] '),as.list))
+            names(info) <- c('Amino_Acid_Position.a','Amino_Acid_Position.b')
+            info$Amino_Acid_Position.a <- as.integer(info$Amino_Acid_Position.a)
+            info$Amino_Acid_Position.b <- as.integer(info$Amino_Acid_Position.b)
+            tbl <- cbind(tbl,info)
+            setnames(tbl,'combo','Comutation')
+            tbl$i <- 1:nrow(tbl)
+            tbl$x <- (tbl$Amino_Acid_Position.a + tbl$Amino_Acid_Position.b)/2
+            tbl$y <- tbl$ab
+            tbl <- tbl[order(tbl$Amino_Acid_Position.a,tbl$Amino_Acid_Position.b,decreasing=F),]
+            tbl$Comutation <- factor(tbl$Comutation,levels=tbl$Comutation)
+            tbl
+    }
+
+    dat <- prepdata(dat[dat$Hugo_Symbol==gene,])
+    dat <- dat[ab >= min.n,]
+    if(any(labels %in% dat$Comutation)) {
+        dat$label <- dat$Comutation
+        dat[label %nin% labels,label:=NA]
+    } else {
+        dat$label <- as.character(NA)
+    }
+    dat$i <- 1:nrow(dat)
+    pfam <- fread(here('data/tp53_pfam_data.txt'))
+    l <- max(pfam$aa.length[pfam$Hugo_Symbol %in% gene])
+
+    ## include PFAM domain info
+    pf <- pfam[Hugo_Symbol == gene & !is.na(description),]
+    setnames(pf,'description','Domain')
+    setnames(pf,'pfam_start','Amino_Acid_Position.a')
+    setnames(pf,'pfam_end','Amino_Acid_Position.b')
+    pf <- pf[order(pf$Amino_Acid_Position.a,pf$Amino_Acid_Position.b,decreasing=F),]
+    A <- max(dat$ab)
+
+    ## set the size for domains and bar
+    segment.height <- A/10
+    domain.height <- A/10
+    segment.y= 0-segment.height/4
+    segment.y.end= 0+segment.height/4
+    domain.y= 0-domain.height/2
+    domain.y.end= 0+domain.height/2
+    xmin = 0
+
+    ## get the arcs to plot connections
+    get_arcs <- function(d) {
+        maxima <- d$ab[1]
+        if(d$Amino_Acid_Position.a[1] != d$Amino_Acid_Position.b[1]) {
+            x <- seq(d$Amino_Acid_Position.a[1],d$Amino_Acid_Position.b[1],by=0.05)
+            xrange <- max(x)-min(x)
+            cosx <- cos(pi*(x-min(x))/(2*xrange))
+            pos.x <- xrange*(cosx^2)+min(x)
+            lx <- length(x)
+            y <- pi*seq(1,lx)/lx
+            pos.y <- maxima*(sin(y)*sin(y))
+        } else {
+            pos.x <- as.numeric(rep(d$Amino_Acid_Position.a[1],21))
+            y <- seq(0,1,by=0.05)
+            pos.y <- maxima*y
+        }
+        pos.data <- data.table(pos.x=pos.x, pos.y=pos.y)
+        pos.data
+    }
+
+    f <- function(d) {
+        x1=min(d$pos.x)
+        x2=max(d$pos.x)
+        list(x1=x1,x2=x2)
+    }
+    arc <- dat[,get_arcs(.SD),by=c('i','Comutation')]
+    dotpos <- arc[,f(.SD),by=c('Comutation')]
+    dotpos <- melt(dotpos,id.var=c('Comutation'))
+    dotpos[,variable:=NULL]
+    setnames(dotpos,'value','x')
+    dotpos$enriched <- dotpos$Comutation %in% labels
+    mycols <- brewer.pal(12,'Paired')
+    mycols[11] <- 'grey30'
+
+    ## make residue Comutation plot
+    p <- ggplot(data=dat) +
+        theme_classic(base_size=18) +
+        labs(x=NULL,y=NULL,title=NULL) +
+        geom_rect(xmin=xmin, xmax = l, ymin=segment.y, ymax=segment.y.end, fill='#999999') +
+        scale_y_continuous(breaks=seq(0,(round(1.25*A)+1),by=2),limits=c(-0.5,1.25*A)) +
+        scale_x_continuous(breaks=c(0,100,200,287,300,400),limits=c(0,393))
+
+    if(nrow(pf)>0) p <- p + geom_rect(data=pf, aes(xmin=Amino_Acid_Position.a, xmax=Amino_Acid_Position.b, fill=Domain), ymin=domain.y, ymax=domain.y.end)
+    p <- p + geom_point(data=dotpos[enriched==F],aes(x=x),color='darkgrey',y=0,pch=19,size=0.2,alpha=0.5)
+    p <- p + geom_point(data=dotpos[enriched==T],aes(x=x),color='black',y=0,pch=19,size=0.2)
+    for(r in dat$i[is.na(dat$label)])  p <- p + geom_line(data=arc[arc$i==r,],aes(x=pos.x,y=pos.y),color='darkgray',size=0.8,alpha=0.5)
+    for(r in dat$i[!is.na(dat$label)]) p <- p + geom_line(data=arc[arc$i==r,],aes(x=pos.x,y=pos.y),color='black',size=0.8,alpha=1)
+    if(any(!is.na(dat$label))) p <- p + geom_text_repel(aes(x=x,y=y,label=label),color='black',na.rm=T,size=4)
+    p <- p + scale_fill_brewer(palette='Paired') +
+    theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), axis.line.x=element_blank(),
+          axis.text.y=element_blank(), axis.ticks.y=element_blank(), axis.line.y=element_blank(),legend.position='bottom')
+    p
+}
+
+## load/prep P53 compound mutation data for arcplot
+d <- d_phased
+d <- d[Hugo_Symbol=='TP53',c('Tumor_Sample_Barcode','Hugo_Symbol','HGVSp_Short.1','HGVSp_Short.2','Variant_Type.1','Variant_Type.2',
+          'Variant_Classification.1','Variant_Classification.2','phase','exclude'),with=F]
+d <- d[d$exclude==F & d$Variant_Classification.1=='Missense_Mutation' & d$Variant_Classification.2=='Missense_Mutation'
+       & Variant_Type.1=='SNP' & Variant_Type.2=='SNP',]
+info.1 <- HGVSp_Short_parse(d$HGVSp_Short.1)
+info.2 <- HGVSp_Short_parse(d$HGVSp_Short.2)
+d$Amino_Acid_Position.1 <- info.1$Amino_Acid_Position
+d$Amino_Acid_Position.2 <- info.2$Amino_Acid_Position
+d$HGVSp_Short.1 <- gsub('p[.]','',d$HGVSp_Short.1)
+d$HGVSp_Short.2 <- gsub('p[.]','',d$HGVSp_Short.2)
+d$index <- 1:nrow(d)
+d[,c('Variant_Type.1','Variant_Type.2','Variant_Classification.1','Variant_Classification.2'):=NULL]
+
+## swap order of mutations in compound
+reorder <- function(d) {
+    swap_order <- d$Amino_Acid_Position.1 > d$Amino_Acid_Position.2
+    if(swap_order) {
+        setnames(d,'HGVSp_Short.1','HGVSp_Short.2tmp')
+        setnames(d,'HGVSp_Short.2','HGVSp_Short.1')
+        setnames(d,'HGVSp_Short.2tmp','HGVSp_Short.2')
+        setnames(d,'Amino_Acid_Position.1','Amino_Acid_Position.2tmp')
+        setnames(d,'Amino_Acid_Position.2','Amino_Acid_Position.1')
+        setnames(d,'Amino_Acid_Position.2tmp','Amino_Acid_Position.2')
+    }
+    d
+}
+
+d <- d[,reorder(.SD),by=index]
+
+## get arcplot
+p_arcplot <- arcplot('TP53',d,min.n=2)
+
+## add tracks for 1) number of samples with mutations at residue and 2) enrichment for compounds at residue
+x <- fread(here('data/residue_enrichment.txt'))
+x <- x[query_gene=='TP53',]
+x$n_mutated <- x$n.samples_with_singleton_mutation_including_residue + x$n.samples_with_compound_mutation_including_residue
+x$n_compound_mutated <- x$n.samples_with_compound_mutation_including_residue
+x$p <- x$p.value.enriched
+x$q <- x$q.value.enriched
+x <- x[grepl('indel',x$query_mutation)==F & grepl('fs',x$query_mutation)==F & grepl('[*]',x$query_mutation)==F & grepl('X',x$query_mutation)==F,]
+x$pos <- as.integer(substr(x$query_mutation,7,nchar(x$query_mutation)))
+info <- x[,c('pos','query_mutation','n_mutated','n_compound_mutated','p','q'),with=F]
+info <- info[order(p,decreasing=F),]
+
+## make table of mutant-samples and enrichment per residue of P53, merge with peptide sequence for Human P53 from uniprot
+p53 <- 'MEEPQSDPSVEPPLSQETFSDLWKLLPENNVLSPLPSQAMDDLMLSPDDIEQWFTEDPGPDEAPRMPEAAPPVAPAPAAPTPAAPAPAPSWPLSSSVPSQKTYQGSYGFRLGFLHSGTAKSVTCTYSPALNKMFCQLAKTCPVQLWVDSTPPPGTRVRAMAIYKQSQHMTEVVRRCPHHERCSDSDGLAPPQHLIRVEGNLRVEYLDDRNTFRHSVVVPYEPPEVGSDCTTIHYNYMCNSSCMGGMNRRPILTIITLEDSSGNLLGRNSFEVRVCACPGRDRRTEEENLRKKGEPHHELPPGSTKRALPNNTSSSPQPKKKPLDGEYFTLQIRGRERFEMFRELNEALELKDAQAGKEPGGSRAHSSHLKSKKGQSTSRHKKLMFKTEGPDSD'
+out <- data.table(position=1:393,aa=strsplit(p53,'')[[1]])
+out$residue <- paste(out$aa,out$position,sep='')
+out[,aa:=NULL]
+out <- merge(out,info,by.x='position',by.y='pos', all.x=T)
+out[,query_mutation:=NULL]
+out[is.na(n_mutated),n_mutated:=0]
+out[is.na(n_compound_mutated),n_compound_mutated:=0]
+out[is.na(p),p:=1]
+out[is.na(q),q:=1]
+out$nlog10q <- -log10(out$q)
+
+## track1: number of unique samples with mutation per residue
+p_track1 <- ggplot(data=out,aes(x=position,y=0)) + 
+    geom_segment(aes(x=position,xend=position,color=n_mutated),y=0,yend=1) +
+    labs(x=NULL,y='N mutated:') +
+    scale_color_gradient(low='white',high='black') +
+    theme_std(base_size=14) +
+    theme(axis.title.y=element_text(angle=0,hjust=0,vjust=0.5),
+          axis.text.x=element_blank(), axis.ticks.x=element_blank(), axis.line.x=element_blank())
+
+## track2: enrichment 
+p_track2 <- ggplot(data=out,aes(x=position,y=0)) + 
+    geom_segment(aes(x=position,xend=position,color=nlog10q),y=0,yend=1) +
+    ylim(c(-1,1)) +
+    labs(x='Amino acid position',y='Q-value, compound-mutant:') +
+    scale_color_gradient(low='white',high='black') +
+    theme_std(base_size=14) +
+    theme(axis.title.y=element_text(angle=0,hjust=0,vjust=2/3), axis.text.y=element_blank(), axis.ticks.y=element_blank(), axis.line.y=element_blank())
+
+## get plot
+p_arcplot <- extract_gglegend(p_arcplot)
+p_track1 <- extract_gglegend(p_track1)
+p_track2 <- extract_gglegend(p_track2)
+p <- plot_grid(plotlist=list(p_arcplot$plot, p_track1$plot, p_track2$plot), align='v', ncol=1, nrow=3, rel_heights=c(6,1,2.5))
+p <- plot_grid(p, p_arcplot$legend, ncol=1, nrow=2, rel_heights=c(6,1))
+p
+
+```
+
+----------
+
+### Panel F
+
+Heatmap of the top 30 differentially expressed genes between TP53 R277T-, TP53 E284D-, and TP53 R277T-E284D-mutant cells.
+```{r, Panel F}
+message('this is pending')
+```
+
+

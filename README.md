@@ -8,7 +8,9 @@ Code in this repository can be used to recreate the essential parts of the main 
 ### Instructions
 Install required R packages:
 ```r
-install.packages(c('data.table','ggplot2','cowplot','RColorBrewer','parallel','ggsignif','binom','scales','MASS','ggrepel','here','Hmisc'))
+install.packages(c('data.table','ggplot2','cowplot','RColorBrewer',
+                   'parallel','ggsignif','binom','scales','MASS',
+                   'ggrepel','here','Hmisc'))
 ```
 Download RNA-Seq count file GSE136295_FSR_RNAseq.featureCounts.cnt.csv.gz from [GEO](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE136295) (requires secure token until Aug 23, 2020).
 
@@ -22,9 +24,10 @@ gunzip data/GSE136295_FSR_RNAseq.featureCounts.cnt.csv.gz
 
 Several datasets used in this manuscript can take multiple hours to run. For convenience, precalculated results from these tests are available in the `data/` directory. These can be regenerated with the following commands:
 ```shell
-Rscript r/run_residue_enrichment_test.R                 ## generates data/residue_enrichment.txt
-Rscript r/run_compound_rate_permutation_test.R          ## generates data/observed_vs_expected_compounds_impact.rds
-Rscript r/run_compound_rate_permutation_test_per_tmb.R  ## generates data/observed_vs_expected_compounds_impact_per_tmb.rds
+Rscript do/run_gene_enrichment_test.R                    ## generates data/gene_enrichment.txt
+Rscript do/run_residue_enrichment_test.R                 ## generates data/residue_enrichment.txt
+Rscript do/run_compound_rate_permutation_test.R          ## generates data/observed_vs_expected_compounds_impact.rds
+Rscript do/run_compound_rate_permutation_test_per_tmb.R  ## generates data/observed_vs_expected_compounds_impact_per_tmb.rds
 ```
 
 HTML files containing the figures can be generated from the command-line for each main figure as such:

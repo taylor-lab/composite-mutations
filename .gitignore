@@ -2,8 +2,8 @@
 *.Rhistory
 .DS_Store
 .Rproj.user
-r/*.html
-r/*.pdf
+do/*.html
+do/*.pdf
 
 # these data files are too large to keep in this repo,
 # pull them from google drive instead
