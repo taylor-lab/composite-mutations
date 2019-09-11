@@ -24,23 +24,23 @@ gunzip data/GSE136295_FSR_RNAseq.featureCounts.cnt.csv.gz
 
 Several datasets used in this manuscript can take multiple hours to run. For convenience, precalculated results from these tests are available in the `data/` directory. These can be regenerated with the following commands:
 ```shell
-Rscript do/run_gene_enrichment_test.R                    ## generates data/gene_enrichment.txt
-Rscript do/run_residue_enrichment_test.R                 ## generates data/residue_enrichment.txt
-Rscript do/run_compound_rate_permutation_test.R          ## generates data/observed_vs_expected_compounds_impact.rds
-Rscript do/run_compound_rate_permutation_test_per_tmb.R  ## generates data/observed_vs_expected_compounds_impact_per_tmb.rds
+Rscript r/run_gene_enrichment_test.R                    ## generates data/gene_enrichment.txt
+Rscript r/run_residue_enrichment_test.R                 ## generates data/residue_enrichment.txt
+Rscript r/run_compound_rate_permutation_test.R          ## generates data/observed_vs_expected_compounds_impact.rds
+Rscript r/run_compound_rate_permutation_test_per_tmb.R  ## generates data/observed_vs_expected_compounds_impact_per_tmb.rds
 ```
 
 HTML files containing the figures can be generated from the command-line for each main figure as such:
 ```shell
-R -e "rmarkdown::render('r/figure-1.Rmd', output_file = 'figure-1.html')"
-R -e "rmarkdown::render('r/figure-2.Rmd', output_file = 'figure-2.html')"
-R -e "rmarkdown::render('r/figure-3.Rmd', output_file = 'figure-3.html')"
-R -e "rmarkdown::render('r/figure-4.Rmd', output_file = 'figure-4.html')"
+R -e "rmarkdown::render('do/figure-1.Rmd', output_file = 'figure-1.html')"
+R -e "rmarkdown::render('do/figure-2.Rmd', output_file = 'figure-2.html')"
+R -e "rmarkdown::render('do/figure-3.Rmd', output_file = 'figure-3.html')"
+R -e "rmarkdown::render('do/figure-4.Rmd', output_file = 'figure-4.html')"
 ```
 
 An HTML file containing values references in the main text can also be generated:
 ```shell
-R -e "rmarkdown::render('r/text_values.Rmd', output_file = 'text_values.html')"
+R -e "rmarkdown::render('do/text_values.Rmd', output_file = 'text_values.html')"
 ```
 
 ### Citation
