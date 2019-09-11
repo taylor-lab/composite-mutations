@@ -1,5 +1,4 @@
 require(data.table)
-#require(rpkg)
 require(ggplot2)
 require(cowplot)
 require(RColorBrewer)
@@ -9,9 +8,9 @@ require(binom)
 require(scales)
 require(MASS)
 require(ggrepel)
-require(here)
 require(Hmisc)
-
+require(Rcpp)
+require(here)
 
 important_classes <- c('Missense_Mutation','Nonsense_Mutation','Splice_Site','In_Frame_Del','In_Frame_Ins','Frame_Shift_Del','Frame_Shift_Ins','TERT promoter','Translation_Start_Site')
 truncating_classes <- c('Nonsense_Mutation','Splice_Site','Frame_Shift_Del','Frame_Shift_Ins')
@@ -66,8 +65,8 @@ colors$barplot2col <- barplot2col
 ## ggplot theme
 theme_std <- function(base_size = 11, base_line_size = base_size/22, base_rect_size = base_size/22) {
     require(ggplot2)
-    theme_classic(base_size = base_size, base_family = 'ArialMT',
-                  base_line_size = base_line_size, base_rect_size = base_rect_size) %+replace%
+    #theme_classic(base_size = base_size, base_family = 'ArialMT', base_line_size = base_line_size, base_rect_size = base_rect_size)  %+replace%
+    theme_classic(base_size = base_size, base_family = 'ArialMT')  %+replace%
     theme(
           line = element_line(colour = "black", size = base_line_size, linetype = 1, lineend = "round"),
           text = element_text(family = 'ArialMT', face = "plain",

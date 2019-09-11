@@ -18,7 +18,7 @@ The rate of compound mutations (22.9% of all tumors) compared to a simulated bac
 ```{r Panel B}
 
 ## load data from permutations
-perm <- readRDS(here::here('data/observed_vs_expected_compounds_impact.rds'))
+perm <- readRDS(here::here('data/observed_vs_expected_compounds_impact_precalculated.rds'))
 obs <- perm$obs_all
 exp <- median(perm$dat_all$prop)
 
@@ -43,6 +43,7 @@ p <- ggplot(pd,aes(x=prop2)) +
     scale_x_continuous(breaks=c(x$breaks,18), labels=c(x$labels,24), limits=c(13.8,18.1)) +
     scale_y_continuous(expand=c(0,0)) +
     labs(x='Percentage',y='100,000 Random shuffles',title=NULL) +
+    theme_std(base_size=14) +
     theme(legend.position='none')
 p
 
@@ -57,7 +58,7 @@ The enrichment or lackthereof for compound mutations as a function of tumor muta
 ```{r Panel C}
 
 ## extract/merge the shuffled compound rate
-l <- readRDS(here::here('data/observed_vs_expected_compounds_per_tmb_impact.rds'))
+l <- readRDS(here::here('data/observed_vs_expected_compounds_per_tmb_impact_precalculated.rds'))
 burdens <- 1:50
 extract_shuffled_data <- function(burden, l) {
     out <- data.table(mu=l[[burden]]$mu, lwr=l[[burden]]$lwr, upr=l[[burden]]$upr, 
@@ -76,12 +77,14 @@ p.pvals <- ggplot(dat,aes(x=burden,y=nlog10p)) +
     scale_x_continuous(breaks=seq(0,40,by=5),limits=c(0,40.5),expand=c(0,0)) +
     scale_y_continuous(expand=c(0,0)) +
     labs(x=NULL,y='-log10(p)') +
+    theme_std(base_size=14) +
     theme(axis.text.x=element_blank(),axis.ticks.x=element_blank(),axis.line.x=element_blank())
 
 p.hist <- ggplot(dat,aes(x=burden,y=N)) +
     geom_bar(stat='identity',width=0.9,fill='black') +
     scale_x_continuous(breaks=seq(0,40,by=5),limits=c(0,40.5),expand=c(0,0)) +
     scale_y_continuous(expand=c(0,0)) +
+    theme_std(base_size=14) +
     labs(x=NULL,y='# Samples')
 
 plot_grid(p.pvals,p.hist,align='v',rel_heights=c(1,1),ncol=1,nrow=2)
@@ -174,7 +177,7 @@ sample_result$reason <- factor(sample_result$reason,levels=reason_levels)
 
 ## theme for pie chart
 piechart_theme <- theme_minimal()+
-    theme_classic(base_size=14) + 
+    theme_std(base_size=14) + 
     theme(
       axis.text.x=element_blank(),
       axis.title.x = element_blank(),
@@ -273,6 +276,7 @@ p <- ggplot(ci,aes(x=Role,y=mean)) +
     geom_errorbar(aes(min=mean,max=upper),color='black',size=0.5,width=0) +
     geom_signif(comparisons=list(c("Oncogenes", "TSGs")), y_position = 20, size=0.2, tip_length = 0.06, annotations=pval_label) + 
     scale_y_continuous(expand=c(0,0),limits=c(0,22)) +
+    theme_std(base_size=14) +
     theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
     labs(x=NULL,y='% of cases with compound mutations',title=NULL)
 p
@@ -344,6 +348,7 @@ p <- ggplot(dat2, aes(x=Role,y=value)) +
     geom_errorbar(data=ci,aes(min=value,max=upper),color='black',width=0) +
     scale_y_continuous(expand=c(0,0),limits=c(0,106)) +
     labs(x='Role in cancer',y='Percentage',title=NULL) +
+    theme_std(base_size=14) +
     theme(legend.position='right',axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
 p
 ```
