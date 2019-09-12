@@ -10,7 +10,7 @@ Install required R packages:
 ```r
 install.packages(c('data.table','ggplot2','cowplot','RColorBrewer',
                    'parallel','ggsignif','binom','scales','MASS',
-                   'ggrepel','here','Hmisc'))
+                   'ggrepel','here','Hmisc','DESeq2','apeglm'))
 ```
 Download RNA-Seq count file GSE136295_FSR_RNAseq.featureCounts.cnt.csv.gz from [GEO](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE136295) (requires secure token until Aug 23, 2020).
 
