@@ -3,14 +3,19 @@
 Companion code to the paper: \
 **__Pervasive compound oncogenic mutations in cancer__**
 
-Code in this repository can be used to recreate the essential parts of the main figures in the manuscript. All code is in R.
+Code in this repository can be used to recreate the essential parts of the main figures in the manuscript. All code is in R (>=3.5.0).
 
 ### Instructions
-Install required R packages:
+Install required R packages from CRAN:
 ```r
 install.packages(c('data.table','ggplot2','cowplot','RColorBrewer',
-                   'parallel','ggsignif','binom','scales','MASS',
-                   'ggrepel','here','Hmisc','DESeq2','apeglm'))
+                   'ggsignif','binom','scales','MASS',
+                   'ggrepel','here','Hmisc'))
+```
+Install additional required R packages from Bioconductor:
+```r
+if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+BiocManager::install(c("apeglm","DESeq2"))
 ```
 Download RNA-Seq count file GSE136295_FSR_RNAseq.featureCounts.cnt.csv.gz from [GEO](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE136295) (requires secure token until Aug 23, 2020).
 
