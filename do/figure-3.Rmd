@@ -619,7 +619,7 @@ p_track1 <- ggplot(data=out,aes(x=position,y=0)) +
     labs(x=NULL,y='N mutated:') +
     scale_color_gradient(low='white',high='black') +
     theme_std(base_size=14) +
-    theme(axis.title.y=element_text(angle=0,hjust=0,vjust=0.5),
+    theme(axis.title.y=element_text(angle=0,hjust=0,vjust=0.5),axis.line.y=element_blank(),
           axis.text.x=element_blank(), axis.ticks.x=element_blank(), axis.line.x=element_blank())
 
 ## track2: enrichment 
@@ -646,8 +646,110 @@ p
 ### Panel F
 
 Heatmap of the top 30 differentially expressed genes between TP53 R277T-, TP53 E284D-, and TP53 R277T-E284D-mutant cells.
-```{r, Panel F}
-message('this is pending')
+
+```{r, Panel F, fig.width=6,fig.height=6}
+
+
+## helper function to replace sample barcodes with allele+replicate labels
+replace_barcodes_with_alleles <- function(d) { 
+    fields <- names(d)
+    f <- function(s) {strsplit(s,'_IGO')[[1]][1]}
+    fields <- sapply(fields, f, USE.NAMES=F)
+    names(d) <- fields
+    names(d) <- gsub('12','E282K',names(d))
+    names(d) <- gsub('41','R277T',names(d))
+    names(d) <- gsub('51','R277K',names(d))
+    names(d) <- gsub('206','E284D',names(d))
+    names(d) <- gsub('691','R277T_E284D',names(d))
+    names(d) <- gsub('696','R277K_E282K',names(d))
+    names(d) <- gsub('E_','EV_',names(d))
+    names(d) <- gsub('_T1','_A',names(d))
+    d
+}
+
+## convert raw counts to TPM
+message('Generating TPM from raw count matrix ...')
+cnt_orig <- fread(here('data/GSE136295_FSR_RNAseq.featureCounts.cnt.csv'))
+info_fields <- names(cnt_orig)[c(1,27:ncol(cnt_orig))] 
+sample_fields <- names(cnt_orig)[names(cnt_orig) %nin% info_fields]   
+cnt <- cnt_orig[,c('ID','transcript_length',sample_fields),with=F]   
+gettpm <- function(cnt) {  
+    len <- cnt$transcript_length
+    counts <- cnt[,(sample_fields),with=F]
+    x <- counts/len 
+    t(t(x)*1e6/colSums(x))
+}
+res <- as.data.table(gettpm(cnt))
+tpm <- cbind(ID=cnt$ID, res) 
+tpm <- replace_barcodes_with_alleles(tpm)
+
+## prep raw counts for DESeq2
+message('Prepping counts for DESeq2 to find differntially expressed genes ...')
+info_fields <- names(cnt_orig)[c(1,27:ncol(cnt_orig))] 
+sample_fields <- names(cnt_orig)[names(cnt_orig) %nin% info_fields]   
+cnt <- cnt_orig[,c('ID',sample_fields),with=F]   
+cnt <- replace_barcodes_with_alleles(cnt)
+
+## remove genes with low expression (<16 reads)
+#x <- cnt[,2:(ncol(cnt)),with=F]
+#avg_reads_per_gene <- rowMeans(x)
+#low_expression <- cnt$ID[avg_reads_per_gene < 16]
+#cnt <- cnt[ID %nin% low_expression,]
+
+## subset columns of cnt and tpm for alleles of interest
+keep_fields <- adt(expand.grid(c('WT','EV','E284D','R277T','R277T_E284D'),c('A','B','C'), stringsAsFactors=F))
+keep_fields$Var1 <- factor(keep_fields$Var1, levels=c('WT','EV','E284D','R277T','R277T_E284D'))
+keep_fields <- keep_fields[order(Var1,Var2),]
+alleles <- unique(keep_fields$Var1)
+keep_fields$field <- paste(keep_fields$Var1,keep_fields$Var2,sep='_')
+cnt <- cnt[,c('ID',keep_fields$field),with=F]
+tpm <- tpm[,c('ID',keep_fields$field),with=F]
+
+## prep `cnt` and `coldata` objects for DESeq2
+ids <- cnt$ID
+cnt[,c('ID'):=NULL]
+cnt <- as.matrix(cnt)
+rownames(cnt) <- ids
+fields <- colnames(cnt)
+coldata <- data.frame(id=fields)
+coldata$allele <- substr(coldata$id,1,(nchar(coldata$id)-2))
+coldata$replicate <- substr(coldata$id,(nchar(coldata$id)-0),nchar(coldata$id))
+rownames(coldata) <- coldata$id
+coldata$id <- NULL
+coldata$allele <- factor(coldata$allele, levels = alleles)
+
+# Be rigid and require it be expressed in EVERY sample
+unexpressed_threshold=exp(2)
+rem=rownames(cnt)[which(rowSums(cnt<=unexpressed_threshold)>=1)]; 
+
+## test genes for differential expression
+dds=DESeqDataSetFromMatrix(countData=cnt,colData=coldata,design=~allele)
+dds=dds[-which(rownames(dds)%in%rem),]; # pre-filtering
+dds=DESeq(dds)
+
+top30=function(dds,fc_sign,allele1,allele2) {
+    res=results(dds,contrast=c("allele",allele1,allele2))
+    res=res[order(res$pvalue),] 
+    idx=rownames(res)[which(sign(res$log2FoldChange)==fc_sign)[1:30]]
+    return(idx)
+}
+
+comp2=top30(dds,1,"R277T","E284D")
+comp3=top30(dds,1,"R277T","R277T_E284D")
+comp4=top30(dds,1,"E284D","R277T_E284D")
+heatmap_genes <- unique(c(comp2, comp3, comp4))
+
+ids <- tpm$ID
+tpm[,ID:=NULL]
+tpm <- as.matrix(tpm)
+rownames(tpm) <- ids
+tpm=tpm[heatmap_genes,]
+tpm <- tpm[,rownames(coldata)]
+
+# Heatmap
+pheatmap(log(tpm),cluster_cols=FALSE,border_color=NA,scale="row",color=colorRampPalette(rev(brewer.pal(n=7,name="RdBu")))(100),
+    cex=0.75,breaks=seq(-1.5,1.5,length=99),show_rownames=F,fontsize=16,angle_col=45)
+
 ```
 
 

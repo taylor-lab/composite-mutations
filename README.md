@@ -10,12 +10,12 @@ Install required R packages from CRAN:
 ```r
 install.packages(c('data.table','ggplot2','cowplot','RColorBrewer',
                    'ggsignif','binom','scales','MASS',
-                   'ggrepel','here','Hmisc'))
+                   'ggrepel','here','Hmisc','pheatmap'))
 ```
 Install additional required R packages from Bioconductor:
 ```r
 if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
-BiocManager::install(c("apeglm","DESeq2"))
+BiocManager::install(c("DESeq2"))
 ```
 Download RNA-Seq count file GSE136295_FSR_RNAseq.featureCounts.cnt.csv.gz from [GEO](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE136295) (requires secure token until Aug 23, 2020).
 
