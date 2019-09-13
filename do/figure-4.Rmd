@@ -1,0 +1,382 @@
+---
+title: "Figure 4"
+output: html_document
+chunk_output_type: console
+---
+
+```{r setup, include = FALSE, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, autodep = knitr::dep_prev())
+source(here::here('r/prerequisites.R'))
+
+d_clinical <- fread(here('data/data_clinical.txt'),select=c('Tumor_Sample_Barcode','exclude'))
+
+## load starting datasets
+d_mutations <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','PATIENT_ID','exclude','Hugo_Symbol','Role','putative_resistance_mutation',
+                                                              'Variant_Classification','Variant_Type','tcn', 'mutationid', 'high_tmb','hotspot_class',
+                                                              'tm','hotspotid','HGVSp_Short','truncating','Reference_Allele','Tumor_Seq_Allele2',
+                                                              'Start_Position','End_Position'))
+
+```
+
+----------
+
+### Panel A
+
+The significance of enrichment of individual mutant residues to arise in compound mutations compared to the significance of compound enrichment among genes. 
+
+```{r Panel A, fig.width=8,fig.height=6}
+## plot colors
+cols <- c('#EF7B64','#1A89AD','#70C1DF','#BFBFBE')
+names(cols) <- c('Gene + Residue','Gene','Residue','Not significant')
+
+
+## load data for gene and residue enrichment for compound mutations
+gene_enrichment <- fread(here('data/gene_enrichment_precalculated.txt'))
+residue_enrichment <- fread(here('data/residue_enrichment_precalculated.txt'))
+
+## merge in gene enrichment data and plot
+gene_enrichment <- gene_enrichment[,c('Hugo_Symbol','q_enriched'),with=F]
+setnames(gene_enrichment,'Hugo_Symbol','query_gene')
+residue_enrichment <- residue_enrichment[,c('query_gene','query_mutation','q.value.enriched'),with=F]
+setnames(residue_enrichment,'q.value.enriched','q.value')
+dat <- merge(residue_enrichment,gene_enrichment,by='query_gene',all.x=T)
+names(dat) <- c('gene','residue','q.residue','q.gene')
+dat$nlog10q.gene <- -log10(dat$q.gene)
+dat$nlog10q.residue <- -log10(dat$q.residue)
+
+## additional formatting for plot
+gene_labs <- dat[q.gene < 0.01,c('gene','q.gene'),with=F]
+gene_labs <- gene_labs[!duplicated(gene),]
+gene_labs$nlog10q.gene <- -log10(gene_labs$q.gene)
+gene_labs$sig <- 'Not significant'
+gene_labs[q.gene < 0.01,sig:='Gene']
+gene_labs$sig <- factor(gene_labs$sig,levels=names(cols))
+residue_labs <- dat[(q.residue < 0.01 & q.gene < 0.01) | (q.residue < 1e-3 & q.gene >= 0.01) ,c('gene','residue','q.gene','q.residue'),with=F]
+residue_labs <- residue_labs[!duplicated(residue),]
+residue_labs$nlog10q.gene <- -log10(residue_labs$q.gene)
+residue_labs$nlog10q.residue <- -log10(residue_labs$q.residue)
+residue_labs <- residue_labs[order(gene,q.residue,decreasing=F),]
+
+topN_per_gene <- function(d,n) {
+    d <- d[order(q.residue,decreasing=F),]
+    d[1:n,]
+}
+top3_genes <- c('APC','PIK3CA','TP53','EGFR')
+residue_labs3 <- residue_labs[gene %in% top3_genes,topN_per_gene(.SD,3),by=gene]
+top1_genes <- c('PTEN','MAP3K1','FBXW7','TERT','BRAF','ERBB2','FGFR2')
+residue_labs1 <- residue_labs[gene %in% top1_genes,topN_per_gene(.SD,1),by=gene]
+residue_labs_other <- residue_labs[gene %nin% c(top3_genes,top1_genes),topN_per_gene(.SD,1),by=gene]
+residue_labs_other$residue <- NA
+residue_labs <- rbind(residue_labs3, residue_labs1, residue_labs_other)
+
+residue_labs <- residue_labs[!is.na(q.residue)]
+residue_labs$sig <- 'Not significant'
+residue_labs[q.residue < 0.01 & q.gene < 0.01,sig:='Gene + Residue']
+residue_labs[q.residue >= 0.01 & q.gene < 0.01,sig:='Gene']
+residue_labs[q.residue < 0.01 & q.gene >= 0.01,sig:='Residue']
+residue_labs$sig <- factor(residue_labs$sig,levels=names(cols))
+
+sig_val <- -log10(0.01)
+dat$sig <- 'Not significant'
+dat[q.residue < 0.01 & q.gene < 0.01,sig:='Gene + Residue']
+dat[q.residue >= 0.01 & q.gene < 0.01,sig:='Gene']
+dat[q.residue < 0.01 & q.gene >= 0.01,sig:='Residue']
+dat$sig <- factor(dat$sig,levels=names(cols))
+
+dat[is.infinite(nlog10q.gene),nlog10q.gene:=200]
+dat <- dat[!is.na(q.gene),]
+gene_labs[is.infinite(nlog10q.gene),nlog10q.gene:=200]
+gene_labs <- gene_labs[!is.na(q.gene),]
+plot_gene_labels <- c('NF1','CDKN1A','CIC','CDK12','PIK3R1')
+gene_labs$label <- gene_labs$gene
+gene_labs[gene %nin% plot_gene_labels,label:=NA]
+residue_labs[is.infinite(nlog10q.gene),nlog10q.gene:=200]
+residue_labs <- residue_labs[!is.na(q.gene),]
+
+## broken x-axis
+x_info <- break_axis(dat$nlog10q.gene,maxlower=30,minupper=50,lowerticksize=5,upperticksize=50,ratio_lower_to_upper=0.45)
+dat$nlog10q.gene.new <- x_info$newy
+x_info_gene_labs <- break_axis(gene_labs$nlog10q.gene,maxlower=30,minupper=50,lowerticksize=5,upperticksize=50,ratio_lower_to_upper=0.45)
+gene_labs$nlog10q.gene.new <- x_info_gene_labs$newy
+x_info_residue_labs <- break_axis(residue_labs$nlog10q.gene,maxlower=30,minupper=50,lowerticksize=5,upperticksize=50,ratio_lower_to_upper=0.45)
+residue_labs$nlog10q.gene.new <- x_info_residue_labs$newy
+
+## broken y-axis
+y_info <- break_axis(dat$nlog10q.residue,maxlower=10,lowerticksize=2,upperticksize=5,ratio_lower_to_upper=0.25)
+dat$nlog10q.residue.new <- y_info$newy
+y_info_residue_labs <- break_axis(residue_labs$nlog10q.residue,maxlower=10,lowerticksize=2,upperticksize=5,ratio_lower_to_upper=0.25)
+residue_labs$nlog10q.residue.new <- y_info_residue_labs$newy
+
+## make plot
+p <- ggplot(dat,aes(x=nlog10q.gene.new,y=nlog10q.residue.new)) +
+    geom_hline(yintercept=sig_val,color='grey',size=0.5,linetype='dashed') +
+    geom_vline(xintercept=sig_val,color='grey',size=0.5,linetype='dashed') +
+    geom_point(aes(color=sig),size=1.2) +
+    geom_text_repel(data=residue_labs,aes(x=nlog10q.gene.new,y=nlog10q.residue.new,label=residue,color=sig),angle=0,hjust=0,vjust=0.5) +
+    geom_text_repel(data=gene_labs,aes(x=nlog10q.gene.new,label=label,color=sig),y=0,angle=90,hjust=1.2,vjust=0.5) +
+    scale_x_continuous(limits=x_info$limits,labels=x_info$labels,breaks=x_info$breaks) +
+    scale_y_continuous(limits=c(-0.5,y_info$limits[2]),labels=y_info$labels,breaks=y_info$breaks) +
+    scale_color_manual(values=cols,name='Leve of enrichment\n(compounds):') +
+    theme_classic(base_family='ArialMT',base_size=14) +
+    theme(legend.position='bottom') +
+    labs(x='Gene -log10(q-value)',y='Residue -log10(q-value)',title=NULL)
+p
+
+```
+
+----------
+
+### Panel B
+
+The incidence of TERT promoter mutations in the study cohort and the fraction arising as compound mutations. 
+
+```{r, Panel B, fig.width=6,fig.height=4}
+
+tert <- d_mutations
+tert <- tert[Hugo_Symbol=='TERT' & Variant_Classification=='TERT promoter' & exclude==F,]
+
+get_tert_mutation <- function(Start_Position,Reference_Allele,Tumor_Seq_Allele2) {
+    Amino_Acid_Position <- as.integer(substr(Start_Position,5,7))
+    Reference_Allele <- toupper(Reference_Allele)
+    Tumor_Seq_Allele2 <- toupper(Tumor_Seq_Allele2)
+    mutation <- paste0(Amino_Acid_Position,Reference_Allele,'>',Tumor_Seq_Allele2)
+    mutation
+}
+tert$mutation <- get_tert_mutation(tert$Start_Position, tert$Reference_Allele, tert$Tumor_Seq_Allele2)
+mutations <- unique(tert$mutation)
+
+getN <- function(query.mutation, d) {
+    mutant_samples <- d$Tumor_Sample_Barcode[d$mutation==query.mutation]
+    samples_with_mutation <- d$Tumor_Sample_Barcode[d$Tumor_Sample_Barcode %in% mutant_samples]
+    tbl <- table.freq(samples_with_mutation)
+    compound_samples <- tbl$value[tbl$N > 1]
+    singleton_samples <- tbl$value[tbl$N == 1]
+    n_compound <- length(unique(strtrim(compound_samples, 9)))
+    n_singleton <- length(unique(strtrim(singleton_samples, 9)))
+    n_overall <- length(unique(strtrim(tbl$value, 9)))
+    list(mutation=query.mutation,n_compound=n_compound, n_singleton=n_singleton, n_overall=n_overall)
+}
+l <- lapply(mutations, getN, tert)
+l <- rbindlist(l)
+
+info <- l[order(n_overall,decreasing=T),]
+info <- info[n_overall >= 5,]
+yinfo <- break_axis(info$n_overall,maxlower=50,minupper=500,lowerticksize=10,upperticksize=1000,ratio_lower_to_upper=0.75)
+info$y_overall <- yinfo$newy
+info$y_compound <- info$y_overall * info$n_compound/info$n_overall
+info$y_singleton <- info$y_overall * info$n_singleton/info$n_overall
+
+infoM <- melt(info[,c('mutation','y_compound','y_singleton'),with=F], id.vars=c('mutation'))
+infoM[variable=='y_compound',variable:='Compound']
+infoM[variable=='y_singleton',variable:='Singleton']
+infoM$variable <- factor(infoM$variable, levels=c('Singleton','Compound'))
+infoM$mutation <- factor(infoM$mutation, levels=rev(info$mutation))
+info$label <- paste0(round(info$n_compound / info$n_overall,3)*100,'%')
+labels <- info[,c('mutation','label','y_compound'),with=F]
+
+cols <- c('#EF7A63','#70C1DF')
+names(cols) <- c('Compound','Singleton')
+
+p1 <- ggplot(infoM, aes(x=mutation, y=value)) +
+    geom_bar(stat='identity',aes(fill=variable)) +
+    scale_y_continuous(breaks=yinfo$breaks,labels=yinfo$labels,limits=yinfo$limits,expand=c(0,0),position='right') +
+    scale_fill_manual(values=cols, name=NULL) +
+    geom_text(data=labels,aes(label=label,x=mutation,y=y_compound),color='black',hjust=-0.2,vjust=0.5) +
+    theme_std(base_size=14) +
+    theme(axis.text.x=element_text(angle=0,hjust=1,vjust=0.5),legend.position='bottom') +
+    labs(x=NULL,y='Number of patients') + 
+    coord_flip()
+p1
+
+```
+
+----------
+
+### Panel C
+
+The co-occurrence and mutual exclusivity of compound mutations in the TERT promoter.
+
+```{r, Panel C, fig.width=6,fig.height=4}
+
+
+all_samples <- d_clinical$Tumor_Sample_Barcode[d_clinical$exclude==F]
+alleles <- info$mutation
+x <- adt(expand.grid(m1=alleles, m2=alleles, stringsAsFactors=F))
+
+test_comut <- function(i, x, d) {
+    out <- x[i,]
+    m1_samples <- d$Tumor_Sample_Barcode[d$mutation==out$m1]
+    m2_samples <- d$Tumor_Sample_Barcode[d$mutation==out$m2]
+    samples_AB <- all_samples[all_samples %nin% c(m1_samples, m2_samples)]
+    samples_aB <- m1_samples[m1_samples %nin% m2_samples]
+    samples_Ab <- m2_samples[m2_samples %nin% m1_samples]
+    samples_ab <- intersect(m1_samples, m2_samples)
+    AB <- length(unique(strsplit(samples_AB,9)))
+    aB <- length(unique(strsplit(samples_aB,9)))
+    Ab <- length(unique(strsplit(samples_Ab,9)))
+    ab <- length(unique(strsplit(samples_ab,9)))
+    m <- rbind(c(AB,aB),c(Ab,ab))
+    tst <- fisher.test(m, alternative='two.sided')
+    out$AB <- AB; out$aB <- aB; out$Ab <- Ab; out$ab <- ab
+    out$OR <- as.numeric(tst$estimate)
+    out$p <- as.numeric(tst$p.value)
+    out
+}
+
+
+l <- lapply(1:nrow(x), test_comut, x, tert)
+l <- rbindlist(l)
+l$m1 <- factor(l$m1, levels=alleles)
+l$m2 <- factor(l$m2, levels=alleles)
+#l <- l[m1!=m2,]
+l$label <- l$ab
+l$direction <- 'not significant'
+l[p < 0.01 & OR < 1,direction:='mutually exclusive']
+l[p < 0.01 & OR > 1,direction:='co-occurring']
+l[p >= 0.01 & ab == 0, label:=NA]
+l$logOR <- log2(l$OR)
+
+
+m_ab <- reshape(l[,c('m1','m2','ab'),with=F],idvar='m1',timevar='m2',direction='wide')
+rows <- m_ab$m1
+m_ab[,m1:=NULL]
+m_ab <- as.matrix(m_ab)
+rownames(m_ab) <- rows
+colnames(m_ab) <- rows
+m_ab <- m_ab[alleles, alleles]
+m_ab[upper.tri(m_ab,diag=T)] <- NA
+mm_ab <- melt(m_ab)
+names(mm_ab) <- c('m1','m2','ab')
+
+m_label <- reshape(l[,c('m1','m2','label'),with=F],idvar='m1',timevar='m2',direction='wide')
+rows <- m_label$m1
+m_label[,m1:=NULL]
+m_label <- as.matrix(m_label)
+rownames(m_label) <- rows
+colnames(m_label) <- rows
+m_label <- m_label[alleles, alleles]
+m_label[upper.tri(m_label,diag=T)] <- NA
+mm_label <- melt(m_label)
+names(mm_label) <- c('m1','m2','label')
+
+m_direction <- reshape(l[,c('m1','m2','direction'),with=F],idvar='m1',timevar='m2',direction='wide')
+rows <- m_direction$m1
+m_direction[,m1:=NULL]
+m_direction <- as.matrix(m_direction)
+rownames(m_direction) <- rows
+colnames(m_direction) <- rows
+m_direction <- m_direction[alleles, alleles]
+m_direction[upper.tri(m_direction,diag=T)] <- NA
+mm_direction <- melt(m_direction)
+names(mm_direction) <- c('m1','m2','direction')
+
+mm <- adt(mm_ab)
+mm$label <- mm_label$label
+mm$direction <- mm_direction$direction
+mm <- mm[m1 %nin% '228G>A' & m2 %nin% '205G>A']
+mm$m1 <- factor(mm$m1, levels=alleles)
+mm$m2 <- factor(mm$m2, levels=alleles)
+mm[is.na(direction),direction:='not significant']
+
+box_colors <- c('#EF7A63','black','white')
+names(box_colors) <- c('mutually exclusive','co-occurring','not significant')
+p <- ggplot(mm, aes(x=m2, y=m1)) +
+    geom_tile(aes(fill=ab,color=direction),size=1,width=0.95,height=0.95) +
+    scale_fill_gradient(low='#F1F1F2',high='steelblue',na.value='white',name='N') +
+    scale_color_manual(values=box_colors,name=NULL) + 
+    scale_x_discrete(expand=c(0,0)) +
+    scale_y_discrete(expand=c(0,0)) +
+    geom_text(aes(label=label)) + 
+    theme_std(base_size=14) +
+    theme(
+        axis.text.x=element_text(angle=90,hjust=1,vjust=0.5),
+        axis.ticks.x=element_blank(),
+        axis.line.x=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.line.y=element_blank()) + 
+    labs(x=NULL, y=NULL) 
+p
+
+```
+
+----------
+
+### Panel D
+
+The degree of TERT expression induced by transient transfection of TERT promoter mutations individually or as cis compound mutants in three melanoma cell lines.
+
+```{r, Panel D}
+
+## load experimental data
+d <- fread(here('data/tert_rlu_luciferase.txt'))
+setnames(d,'cell line','line')
+d <- melt(d,id.vars=c('Replicate','line'))
+
+## calculate significance between alleles (controlling for cell line)
+test <- function(allele1, allele2, d) {
+    tmp <- d[variable %in% c(allele1, allele2),]
+    tmp$allele1 <- tmp$variable==allele1
+    m <- lm(value ~ allele1 + line, data=tmp)
+    out <- Anova(m, type="II")
+    p.anova <- as.numeric(adt(out)[1,4])
+    data.table(allele1=allele1,allele2=allele2,p.anova=p.anova)
+}
+x1 <- test('WT','205C>T',d)
+x2 <- test('WT','228C>T',d)
+x3 <- test('WT','250C>T',d)
+x4 <- test('WT','228C>T + 205C>T',d)
+x5 <- test('WT','250C>T + 205C>T',d)
+x6 <- test('228C>T','228C>T + 205C>T',d)
+x7 <- test('250C>T','250C>T + 205C>T',d)
+out <- rbind(x1,x2,x3,x4,x5,x6,x7)
+out$p.anova <- paste0('p=',prettyNum(out$p.anova,digits=1))
+
+## collapse replicates by mean +/- sem
+collapse_replicates <- function(d) {
+    mu <- mean(d$value)
+    n <- nrow(d)
+    sem <- sd(d$value)/sqrt(n)
+    list(mu=mu,sem=sem)
+}
+d <- d[,collapse_replicates(.SD),by=c('variable','line')]
+d$lwr <- d$mu - d$sem
+d$upr <- d$mu + d$sem
+d$id <- paste0(d$variable,' ',d$line)
+d$line <- factor(d$line, levels=c('A375','Sk-Mel2','Sk-Mel30'))
+d <- d[order(variable,line)]
+d$id <- factor(d$id, levels=d$id)
+globalmax <- max(d$upr)
+
+## hardcode the positions for the lines comparing significance
+out2 <- out
+allele_levels=unique(d$variable)
+out2$allele1 <- factor(out2$allele1,levels=allele_levels)
+out2$allele2 <- factor(out2$allele2,levels=allele_levels)
+index <- c(1,6,7,2,4,3,5)
+out2 <- out2[index,]
+out2$ypos <- c(55,325,250,400,425,450,475)
+
+## define colors
+line_colors <- c('#B7DBEB','#70C1DF','#1A89AD')
+names(line_colors) <- levels(d$line)
+
+## make plot
+p <- ggplot(d, aes(x=variable, y=mu, ymin=lwr, ymax=upr, fill=line)) +
+    geom_bar      (position=position_dodge(), aes(y=mu), stat="identity") +
+    geom_errorbar (position=position_dodge(width=0.9), width=0, colour="black") +
+    scale_fill_manual(values=line_colors, name=NULL) +
+    theme_std(base_size=14) +
+    theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1),axis.line.y=element_blank()) +
+    scale_y_continuous(expand=c(0,0), breaks=seq(0,350,by=50),limits=c(0,550)) +
+    labs(x='TERT promoter allele',y='RLU Luciferase') 
+    for(i in 1:nrow(out2)) p <- p + geom_signif(comparisons=list(c(out2$allele1[i],out2$allele2[i])), y_position = out2$ypos[i] + 5,
+                                             annotations=out2$p.anova[i],family='ArialMT',size=0.5,tip_length=0)
+
+p
+
+```
+
+
+
+
+

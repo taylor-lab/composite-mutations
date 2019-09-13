@@ -8,18 +8,6 @@ chunk_output_type: console
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, autodep = knitr::dep_prev())
 source(here::here('r/prerequisites.R'))
 
-#d_clinical <- fread(here('data/data_clinical.txt'))
-
-## load starting datasets
-#d_mutations <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','PATIENT_ID','exclude','Hugo_Symbol','Role','putative_resistance_mutation',
-#                                                              'Variant_Classification','Variant_Type','tcn', 'mutationid', 'high_tmb','hotspot_class',
-#                                                              'tm','hotspotid','HGVSp_Short','truncating','Reference_Allele','Tumor_Seq_Allele2',
-#                                                              'Start_Position','End_Position'))
-
-#d_clinical_tcga <- fread(here('data/data_clinical_tcga.txt'))
-#d_mutations_tcga <- fread(here('data/data_mutations_tcga.txt'),select=c('Tumor_Sample_Barcode','Hugo_Symbol'))
-#gene_info <- fread(here('data/gene_info.txt'))
-
 ## load phasing data and exclude duplicates from phasing data
 d_phased <- fread(here('data/data_mutations_phased.txt'))
 d_phased$id <- paste(d_phased$mutationid.1,d_phased$mutationid.2,sep=' + ')

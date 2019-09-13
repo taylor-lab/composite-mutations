@@ -10,7 +10,7 @@ Install required R packages from CRAN:
 ```r
 install.packages(c('data.table','ggplot2','cowplot','RColorBrewer',
                    'ggsignif','binom','scales','MASS',
-                   'ggrepel','here','Hmisc','pheatmap'))
+                   'ggrepel','here','Hmisc','pheatmap','car'))
 ```
 Install additional required R packages from Bioconductor:
 ```r
