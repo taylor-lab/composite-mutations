@@ -140,7 +140,7 @@ run_permutation_per_tmb <- function(burden, d) {
     }
     res <- m[,summarize_sample(.SD),by=Tumor_Sample_Barcode]
     obs <- sum(res$any.compound) / Ntmb
-    list(dat_all=ll, obs_all=obs, burden=burden, samples=Ntmb)
+    list(dat_all=ll, obs_all=obs, burden=burden)
 }
 
 ## load sampleid and gene-symbols from mutation data
@@ -171,28 +171,7 @@ l2 <- lapply(l, get_results)
 saveRDS(l2,file=here('data/observed_vs_expected_compounds_per_tmb_impact.rds'))
 
 
-
-## HACK TO ADD IN SAMPLES TO THIS OUTPUT (ALREADY FIXED IN FUNCTION ABOVE)
-#d <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','Hugo_Symbol','tmb'))
-#d <- d[order(Tumor_Sample_Barcode, Hugo_Symbol),]
-#d$tmb <- round(d$tmb)
-#d <- d[!duplicated(Tumor_Sample_Barcode),]
-#d <- d[tmb <= 50,]
-#tbl <- table.freq(d$tmb)
-#tbl$value <- as.integer(tbl$value)
-#l2 <- readRDS(here('data/observed_vs_expected_compounds_per_tmb_impact.rds'))
-#fixl2 <- function(l2,tbl) {
-#    burden <- l2$burden
-#    samples <- tbl$N[tbl$value==burden]
-#    l2$samples <- samples
-#    l2
-#}
-#l2fixed <- lapply(l2, fixl2, tbl) ## <--- check if this worked
-#saveRDS(l2fixed,file=here('data/observed_vs_expected_compounds_per_tmb_impact.rds'))
-
-
-
-
+## CONTINUE HERE AFTER UPDATING TCGA to remove possible DNPs
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # run permutation test for all samples
@@ -257,9 +236,11 @@ tbl$metamaintype <- tbl$value
 tumortypes <- tbl$metamaintype
 
 ## load sampleid and gene-symbols from mutation data
-d <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','Hugo_Symbol','exclude','putative_resistance_mutation','metamaintype'))
+d <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','Hugo_Symbol','exclude','putative_resistance_mutation','metamaintype','hotspot'))
+d <- d[hotspot==F,]
+
 d <- d[exclude==F & putative_resistance_mutation==F,]
-d[,c('exclude','putative_resistance_mutation'):=NULL]
+d[,c('exclude','putative_resistance_mutation','hotspot'):=NULL]
 d <- d[order(Tumor_Sample_Barcode, Hugo_Symbol),]
 
 ## run permutation tests for each tumortype
@@ -301,9 +282,9 @@ run_permutation_per_tumortype <- function(tumortype,d) {
 }
 
 results <- lapply(tumortypes, run_permutation_per_tumortype, d)
-saveRDS(results,file=here('data/observed_vs_expected_compounds_impact_per_tumortype.rds'))
+saveRDS(results,file=here('data/observed_vs_expected_compounds_impact_per_tumortype_nohotspots.rds'))
 
 
 
 
-
+ 
