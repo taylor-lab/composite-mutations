@@ -75,10 +75,10 @@ test_mutation <- function(query_mutation,dd) {
 
 
 ## load/format mutation data
-d_mutations <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','exclude','Hugo_Symbol','Role','putative_resistance_mutation',
+d_mutations <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','exclude','Hugo_Symbol','putative_resistance_mutation',
                                                               'Variant_Classification','Variant_Type','tcn', 'mutationid', 'high_tmb','hotspot_class',
                                                               'tm','hotspotid','HGVSp_Short','truncating'))
-d <- d_mutations
+d <- d_mutations[exclude==F & putative_resistance_mutation==F]
 d[hotspotid!='',tm:=hotspotid] ## in cases of INDEL hotspots, group mutation IDs together into the hotspot cluster
 d[Variant_Classification=='TERT promoter', tm:=paste('TERT',gsub('p[.]','',HGVSp_Short))]
 d <- d[,c('Tumor_Sample_Barcode','Hugo_Symbol','tm','putative_resistance_mutation','mutationid','exclude','truncating','hotspotid','Variant_Classification'),with=F]
@@ -86,6 +86,7 @@ d <- d[,c('Tumor_Sample_Barcode','Hugo_Symbol','tm','putative_resistance_mutatio
 
 ## load/format phasing data
 d_phased <- fread(here('data/data_mutations_phased.txt'))
+d_phased <- d_phased[exclude==F & putative_resistance_mutation.1==F & putative_resistance_mutation.2==F]
 d_phased$id <- paste(d_phased$mutationid.1,d_phased$mutationid.2,sep=' + ')
 d_phased <- d_phased[!duplicated(id),]
 phased <- d_phased
@@ -124,10 +125,6 @@ l <- mclapply(d$mutationid, annotate_phases_of_variant, phased, mc.cores=14)
 ll <- rbindlist(l)
 d <- merge(d, ll, by='mutationid', all.x=T)
 d$tsbgene <- paste(d$Tumor_Sample_Barcode,d$Hugo_Symbol)
-resistance_mutations <- unique(d$tsbgene[d$putative_resistance_mutation==T])
-d <- d[exclude==F,]
-d <- d[tsbgene %nin% resistance_mutations,]
-
 
 ## annotate compounds (including the phased and not-phased)
 tbl <- table.freq(d$tsbgene)
@@ -135,10 +132,8 @@ d <- merge(d, tbl, by.x='tsbgene', by.y='value', all.x=T)
 d$compound <- d$N > 1
 d[,N:=NULL]
 
-
 ## annotate non-compounds as NA for not phased
 d[compound==F,not_phased:=NA]
-
 
 ## test SNP residues and in-frame INDELS mutated in 5+ patients
 tmp <- d[,c('tm','Tumor_Sample_Barcode'),with=F]
@@ -156,8 +151,9 @@ ll$q.value.enriched <- p.adjust(ll$p.value.enriched,method='BH')
 ll$q.value.two.sided <- p.adjust(ll$p.value.two.sided,method='BH')
 ll <- merge(ll, d[!duplicated(tm),c('tm','hotspotid'),with=F], by.x='query_mutation', by.y='tm', all.x=T)
 
-
 ## save result
 write.tsv(ll,here('data/residue_enrichment.txt'))
+
+
 
 

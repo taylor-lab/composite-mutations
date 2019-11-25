@@ -9,13 +9,11 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, autodep = 
 source(here::here('r/prerequisites.R'))
 ```
 
-
-
 ### Panel B
 
 The rate of compound mutations (22.9% of all tumors) compared to a simulated background rate.
 
-```{r Panel B}
+```{r panel_b}
 
 ## load data from permutations
 perm <- readRDS(here::here('data/observed_vs_expected_compounds_impact_precalculated.rds'))
@@ -49,17 +47,18 @@ p
 
 ```
 
-
-
 ### Panel C
 
 The enrichment or lackthereof for compound mutations as a function of tumor mutational burden.
 
-```{r Panel C}
+```{r panel_c}
 
 ## extract/merge the shuffled compound rate
 l <- readRDS(here::here('data/observed_vs_expected_compounds_per_tmb_impact_precalculated.rds'))
+
 burdens <- 1:50
+
+
 extract_shuffled_data <- function(burden, l) {
     out <- data.table(mu=l[[burden]]$mu, lwr=l[[burden]]$lwr, upr=l[[burden]]$upr, 
     burden=l[[burden]]$burden, obs=l[[burden]]$obs, N=l[[burden]]$samples,p=l[[burden]]$p)
@@ -90,14 +89,12 @@ p.hist <- ggplot(dat,aes(x=burden,y=N)) +
 plot_grid(p.pvals,p.hist,align='v',rel_heights=c(1,1),ncol=1,nrow=2)
 ```
 
-
-
 ### Panel D
 
 Potential mechanisms leading to the acquisition of the compound mutations
 
 
-```{r Panel D}
+```{r panel_d}
 
 ## generate data used for pie chart:
 sample_info <- fread(here('data/data_clinical.txt'))
@@ -229,13 +226,11 @@ pie2 <- ggplot(tbl2, aes(x="", y=prop, fill=reason),color='black')+
 plot_grid(pie,pie2,ncol=1,nrow=2)
 ```
 
-
-
 ### Panel E
 
 Rate of compound mutations in oncogenes and TSGs
 
-```{r Panel E}
+```{r panel_e}
 
 ## load mutation data
 d <- fread(here('data/data_mutations.txt'),select=c('exclude','putative_resistance_mutation','Tumor_Sample_Barcode','Hugo_Symbol','Role'))
@@ -283,14 +278,11 @@ p
 
 ```
 
-
-
-
 ### Panel F
 
 Proportion of mutation type among compound mutations by cancer gene function
 
-```{r Panel F}
+```{r panel_f}
 
 ## load phased data with pairwise-mutation comparison
 d <- fread(here('data/data_mutations_phased.txt'),select=c('Tumor_Sample_Barcode','exclude','putative_resistance_mutation.1','putative_resistance_mutation.2',

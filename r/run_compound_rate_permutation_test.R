@@ -1,7 +1,9 @@
 ## % of tumors with any compound: expected vs observed
 ## fig 1c of paper
+## also extended figure-1 (expected vs observed at each TMB)
 
 source(here::here('r/prerequisites.R'))
+cpus <- 12 ## number of CPUs available on this machine for parallelization 
 
 ## C++ function to execute permutations
 cppFunction('IntegerVector shuffle( IntegerVector samples, IntegerVector genes, int iterations) {
@@ -54,11 +56,16 @@ run_for_batch <- function(batch,m,reps_per_batch=100) {
     N <- length(unique(m$Tumor_Sample_Barcode))
     qc <- shuffle(m$Tumor_Sample_Barcode,m$Hugo_Symbol,reps_per_batch)
     out <- data.table(x=colSums(qc))
-    #out$prop <- out$x / N
     out$batch <- batch
     out
 }
 
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# run permutation test for all samples
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+maf <- fread(here('data/data_mutations.txt'))
 
 ## load sampleid and gene-symbols from mutation data
 d <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','Hugo_Symbol'))
@@ -79,7 +86,6 @@ m$Hugo_Symbol <- as.integer(factor(m$Hugo_Symbol)) - 1
 set.seed(42)
 batches <- 1:1000
 reps_per_batch <- 100
-cpus <- 10
 l <- mclapply(batches, run_for_batch, m, reps_per_batch, mc.cores=cpus)
 ll <- rbindlist(l)
 ll$prop <- ll$x / N 
@@ -99,6 +105,205 @@ obs <- sum(res$any.compound) / N
 ## save the results to data/
 results_all <- list(dat_all=ll,obs_all=obs)
 saveRDS(results_all,file=here('data/observed_vs_expected_compounds_impact.rds'))
+
+
+
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# run permutation tests for tmb
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+run_permutation_per_tmb <- function(burden, d) {
+    message(burden)
+    m <- d[tmb==burden,c('Tumor_Sample_Barcode','Hugo_Symbol'),with=F]
+    m$Tumor_Sample_Barcode <- as.integer(factor(m$Tumor_Sample_Barcode)) - 1
+    m$Hugo_Symbol <- as.integer(factor(m$Hugo_Symbol)) - 1
+
+    ## run 1e5 iterations across 1000 parallelized batches of 100 
+    set.seed(42)
+    batches <- 1:1000
+    reps_per_batch <- 100
+    l <- mclapply(batches, run_for_batch, m, reps_per_batch, mc.cores=cpus)
+    ll <- rbindlist(l)
+    Ntmb <- length(unique(m$Tumor_Sample_Barcode))
+    ll$prop <- ll$x / Ntmb 
+
+    ## get the observed proportion of compound-mutant samples
+    m <- d[tmb==burden,c('Tumor_Sample_Barcode','Hugo_Symbol'),with=F]
+    m$id <- paste(m$Tumor_Sample_Barcode,m$Hugo_Symbol)
+    tbl <- table.freq(m$id)
+    m <- merge(m, tbl, by.x='id', by.y='value')
+    m$compound <- m$N > 1
+    summarize_sample <- function(d) {
+        any.compound <- any(d$compound)
+            list(any.compound=any.compound)
+    }
+    res <- m[,summarize_sample(.SD),by=Tumor_Sample_Barcode]
+    obs <- sum(res$any.compound) / Ntmb
+    list(dat_all=ll, obs_all=obs, burden=burden, samples=Ntmb)
+}
+
+## load sampleid and gene-symbols from mutation data
+d <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','Hugo_Symbol','tmb'))
+d <- d[order(Tumor_Sample_Barcode, Hugo_Symbol),]
+d$tmb <- round(d$tmb)
+
+## run permutations for each TMB from 1:50
+prev_run <- -1
+burdens <- 1:50
+burdens <- burdens[burdens %nin% prev_run]
+l <- lapply(burdens, run_permutation_per_tmb, d)
+
+## annotate results from each permutation with the mean, CIs and P-value
+get_results <- function(qc) { 
+    mu <- mean(qc$dat_all$prop)
+    mid <- median(qc$dat_all$prop)
+    lwr <- as.numeric(quantile(qc$dat_all$prop,0.025))
+    upr <- as.numeric(quantile(qc$dat_all$prop,0.975))
+    obs <- qc$obs_all
+    R <- nrow(qc$dat_all)
+    p <- sum(qc$dat_all$prop >= obs)/R
+    samples <- qc$samples
+    out <- list(burden=qc$burden,samples=samples,obs=obs,mu=mu,mid=mid,lwr=lwr,upr=upr,data=qc$dat_all,p=p)
+}
+
+l2 <- lapply(l, get_results)
+saveRDS(l2,file=here('data/observed_vs_expected_compounds_per_tmb_impact.rds'))
+
+
+
+## HACK TO ADD IN SAMPLES TO THIS OUTPUT (ALREADY FIXED IN FUNCTION ABOVE)
+#d <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','Hugo_Symbol','tmb'))
+#d <- d[order(Tumor_Sample_Barcode, Hugo_Symbol),]
+#d$tmb <- round(d$tmb)
+#d <- d[!duplicated(Tumor_Sample_Barcode),]
+#d <- d[tmb <= 50,]
+#tbl <- table.freq(d$tmb)
+#tbl$value <- as.integer(tbl$value)
+#l2 <- readRDS(here('data/observed_vs_expected_compounds_per_tmb_impact.rds'))
+#fixl2 <- function(l2,tbl) {
+#    burden <- l2$burden
+#    samples <- tbl$N[tbl$value==burden]
+#    l2$samples <- samples
+#    l2
+#}
+#l2fixed <- lapply(l2, fixl2, tbl) ## <--- check if this worked
+#saveRDS(l2fixed,file=here('data/observed_vs_expected_compounds_per_tmb_impact.rds'))
+
+
+
+
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# run permutation test for all samples
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+## prep TCGA mutation data
+clin <- fread(here('data/data_clinical_tcga.txt'))
+
+## load and prep TCGA mutation data
+dat <- fread(here('data/data_mutations_tcga.txt'))
+
+## load sampleid and gene-symbols from mutation data
+d <- dat[impact468_gene==T,]
+d <- d[order(Tumor_Sample_Barcode, Hugo_Symbol),]
+
+## get the total number of samples (including any with 0 observed mutations)
+samples <- clin$Tumor_Sample_Barcode
+N <- length(unique(samples))
+
+## convert the data to a 0-indexed integer matrix
+## Tumor_Sample_Barcode = 0,...,N-1 for N unique samples
+## Hugo_Symbol = 0,...,467 (468 genes in panel)
+m <- d
+m$Tumor_Sample_Barcode <- as.integer(factor(m$Tumor_Sample_Barcode)) - 1
+m$Hugo_Symbol <- as.integer(factor(m$Hugo_Symbol)) - 1
+
+## run 1e5 iterations across 1000 parallelized batches of 100 
+set.seed(42)
+batches <- 1:1000
+reps_per_batch <- 100
+l <- mclapply(batches, run_for_batch, m, reps_per_batch, mc.cores=cpus)
+ll <- rbindlist(l)
+ll$prop <- ll$x / N 
+
+## get the observed proportion of compound-mutant samples
+d$id <- paste(d$Tumor_Sample_Barcode,d$Hugo_Symbol)
+tbl <- table.freq(d$id)
+d <- merge(d, tbl, by.x='id', by.y='value')
+d$compound <- d$N > 1
+summarize_sample <- function(d) {
+    any.compound <- any(d$compound)
+    list(any.compound=any.compound)
+}
+res <- d[,summarize_sample(.SD),by=Tumor_Sample_Barcode]
+obs <- sum(res$any.compound) / N
+
+## save the results to data/
+results_all <- list(dat_all=ll,obs_all=obs)
+saveRDS(results_all,file=here('data/observed_vs_expected_compounds_tcga.rds'))
+
+
+
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# load data and run permutations for each tumor type
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+clin <- fread(here('data/data_clinical.txt'))
+clin <- clin[exclude==F,]
+tbl <- table.freq(clin$metamaintype)
+tbl$metamaintype <- tbl$value
+tumortypes <- tbl$metamaintype
+
+## load sampleid and gene-symbols from mutation data
+d <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','Hugo_Symbol','exclude','putative_resistance_mutation','metamaintype'))
+d <- d[exclude==F & putative_resistance_mutation==F,]
+d[,c('exclude','putative_resistance_mutation'):=NULL]
+d <- d[order(Tumor_Sample_Barcode, Hugo_Symbol),]
+
+## run permutation tests for each tumortype
+run_permutation_per_tumortype <- function(tumortype,d) { 
+    message(tumortype)
+    N <- tbl$N[tbl$value==tumortype]
+    d <- d[metamaintype %in% tumortype,]
+
+    ## convert the data to a 0-indexed integer matrix
+    ## Tumor_Sample_Barcode = 0,...,N-1 for N unique samples
+    ## Hugo_Symbol = 0,...,467 (468 genes in panel)
+    m <- d[,c('Tumor_Sample_Barcode','Hugo_Symbol'),with=F]
+    m$Tumor_Sample_Barcode <- as.integer(factor(m$Tumor_Sample_Barcode)) - 1
+    m$Hugo_Symbol <- as.integer(factor(m$Hugo_Symbol)) - 1
+
+    ## run 1e5 iterations across 1000 parallelized batches of 100 
+    set.seed(42)
+    batches <- 1:1000
+    reps_per_batch <- 100
+    l <- mclapply(batches, run_for_batch, m, reps_per_batch, mc.cores=cpus)
+    ll <- rbindlist(l)
+    ll$prop <- ll$x / N 
+
+    ## get the observed proportion of compound-mutant samples
+    d$id <- paste(d$Tumor_Sample_Barcode,d$Hugo_Symbol)
+    tbl <- table.freq(d$id)
+    d <- merge(d, tbl, by.x='id', by.y='value')
+    d$compound <- d$N > 1
+    summarize_sample <- function(d) {
+        any.compound <- any(d$compound)
+        list(any.compound=any.compound)
+    }
+    res <- d[,summarize_sample(.SD),by=Tumor_Sample_Barcode]
+    x <- sum(res$any.compound)
+    obs <- x / N
+
+    ## save the results to data/
+    list(dat_all=ll,obs_all=obs,N=N,x=x,tumortype=tumortype)
+}
+
+results <- lapply(tumortypes, run_permutation_per_tumortype, d)
+saveRDS(results,file=here('data/observed_vs_expected_compounds_impact_per_tumortype.rds'))
+
+
 
 
 

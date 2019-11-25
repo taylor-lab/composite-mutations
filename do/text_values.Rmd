@@ -811,7 +811,7 @@ result[Hugo_Symbol=='TP53']
 
 #### Residues enriched for compound mutations
 ```{r,echo=T}
-    d <- fread(here('data/precalculated_residue_enrichment.txt'))
+    d <- fread(here('data/residue_enrichment_precalculated.txt'))
     length(unique(d$query_mutation[d$q.value.enriched < 0.01])) 
 ```
 
