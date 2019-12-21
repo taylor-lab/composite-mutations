@@ -21,6 +21,8 @@ d[tert_promoter, percentage_gene_gc_content:=0.7896] ## this is the %GC content 
 
 ## get observed number of compound mutated samples and mutated samples per gene
 get_compound_rate_per_gene <- function(d) {
+
+    ## get singletons/compounds/overall WITH hotspots    
     tbl <- table.freq(d$Tumor_Sample_Barcode)
     samples <- tbl$value
     compound_samples <- tbl$value[tbl$N > 1]
@@ -30,10 +32,23 @@ get_compound_rate_per_gene <- function(d) {
     samples <- length(unique(strtrim(samples, 9)))
     compounds <- length(unique(strtrim(compound_samples, 9)))
     singletons <- length(unique(strtrim(singleton_samples, 9)))
-    tcn <- mean(d$tcn,na.rm=T) 
 
-    list(singletons=singletons,compounds=compounds,samples=samples,tcn=tcn,
-         reptime=unique(d$reptime),percentage_gene_gc_content=unique(d$percentage_gene_gc_content),cds_length=unique(d$cds_length),
+    ## get singletons/compounds/overall WITHOUT hotspots    
+    tbl <- table.freq(d$Tumor_Sample_Barcode[d$hotspot_class==''])
+    samples_nohs <- tbl$value
+    compound_samples_nohs <- tbl$value[tbl$N > 1]
+    singleton_samples_nohs <- tbl$value[tbl$N == 1]
+
+    ## don't overcount multiple samples per patient
+    samples_nohs <- length(unique(strtrim(samples_nohs, 9)))
+    compounds_nohs <- length(unique(strtrim(compound_samples_nohs, 9)))
+    singletons_nohs <- length(unique(strtrim(singleton_samples_nohs, 9)))
+
+    tcn <- mean(d$tcn,na.rm=T) 
+    list(
+         singletons=singletons,compounds=compounds,samples=samples,
+         singletons_nohotspots=singletons_nohs,compounds_nohotspots=compounds_nohs,samples_nohotspots=samples_nohs,
+         tcn=tcn,reptime=unique(d$reptime),percentage_gene_gc_content=unique(d$percentage_gene_gc_content),cds_length=unique(d$cds_length),
          panel_introduced=unique(d$panel_introduced))
 }
 res <- d[,get_compound_rate_per_gene(.SD),by=Hugo_Symbol]
@@ -42,9 +57,9 @@ res$Hugo_Symbol <- gsub('-','_',res$Hugo_Symbol)
 res$Hugo_Symbol <- gsub(' ','_',res$Hugo_Symbol)
 
 ## use negative-binomial regression to model the predicted number of compound-mutant samples per gene by chance
-m <- glm.nb(compounds ~ offset(log(samples)) + reptime + cds_length + percentage_gene_gc_content + panel_introduced + tcn, data=res)
+m <- glm.nb(compounds_nohotspots ~ offset(log(samples_nohotspots)) + reptime + cds_length + percentage_gene_gc_content + panel_introduced + tcn, data=res)
 predictions <- predict(m,newdata=res,type='response')
-res$predicted_proportion <- predictions / res$samples
+res$predicted_proportion <- predictions / res$samples_nohotspots
 res$observed_proportion <- res$compounds / res$samples
 dat <- res[,c('Hugo_Symbol','compounds','samples','predicted_proportion','observed_proportion'),with=F]
 
