@@ -1,0 +1,525 @@
+---
+title: "Rebuttal-only figures"
+author: \href{mailto:gorelica@mskcc.org}{Alex Gorelick}
+date: \today
+output: pdf_document
+chunk_output_type: console
+---
+
+
+```{r setup, include = FALSE, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, autodep = knitr::dep_prev())
+source(here::here('r/prerequisites.R'))
+```
+
+# Rebuttal-only A
+```{r panel_a, width=6, height=7}
+
+## cohort sample-type breakdown
+d <- fread(here('data/data_clinical.txt'))
+tbl <- table.freq(d$metamaintype)
+type_order <- c(tbl$value[tbl$value!='Other'],'Other')
+tbl$metamaintype <- factor(tbl$value, levels=(type_order))
+
+p <- ggplot(tbl,aes(x=metamaintype,y=N)) +
+    geom_bar(stat='identity',color='white',fill='black',size=0.2) + 
+    scale_y_continuous(expand=c(0,0)) +
+    theme_std(base_size=14) +
+    theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
+    labs(x=NULL,y='Number of samples') 
+p
+
+```
+
+\pagebreak
+# Rebuttal-only B
+```{r panel_b, width=5, height=6}
+
+d_si <- fread(here('data/data_mutations_silent.txt'))
+count <- function(d) {
+    n <- length(unique(d$Tumor_Sample_Barcode))
+    list(n=n)
+}
+x <- d_si[,count(.SD),by=c('Hugo_Symbol')]
+x <- x[order(n,decreasing=T),]
+names(x) <- c('Hugo_Symbol','silent_mutations')
+
+## now show how the number of silent mutations correlates to gene-enrichment for compound mutations
+gene_results <- fread(here('data/gene_enrichment_precalculated.txt'))
+gene_info <- fread(here('data/gene_info.txt'))
+gene_info <- merge(gene_info[,c('Hugo_Symbol','cds_length'),with=F], gene_results, by='Hugo_Symbol', all.x=T)
+gene_info <- merge(gene_info, x, by='Hugo_Symbol', all.x=T)
+gene_info$silent_rate <- (gene_info$silent_mutations/gene_info$cds_length) #/1e6
+gene_info <- gene_info[order(q_enriched,decreasing=F)]
+gene_info$nlog10q <- -log10(gene_info$q_enriched)
+gene_info$label <- gene_info$Hugo_Symbol
+gene_info[q_enriched >= 1e-10,label:=NA]
+gene_info <- gene_info[!is.na(q_enriched),]
+
+tmp <- gene_info[,c('Role','Hugo_Symbol','silent_rate','q_enriched'),with=F]
+tmp$enrichment_for_compounds <- as.character(NA)
+tmp[q_enriched < 0.01, enrichment_for_compounds:='q<0.01']
+tmp[q_enriched >= 0.01, enrichment_for_compounds:='Not significant']
+tmp <- tmp[!is.na(silent_rate) & !is.na(enrichment_for_compounds),]
+pval <- wilcox.test(tmp$silent_rate[tmp$enrichment_for_compounds=='q<0.01'],tmp$silent_rate[tmp$enrichment_for_compounds=='Not significant'])$p.value
+pval <- paste0('P=',prettyNum(pval,digits=1)); 
+
+
+library(ggsignif)
+p <- ggplot(tmp,aes(x=enrichment_for_compounds,y=silent_rate)) +
+    geom_boxplot(width=0.1,outlier.shape=NA,fill='white') +
+    geom_signif(comparison=list(c('Not significant','q<0.01')), annotation=pval, y_position=0.19) +
+    scale_y_continuous(limits=c(0,0.2),breaks=seq(0,0.15,by=0.025)) +
+    theme_std(base_size=16) +
+    labs(x='Compound mutations in genes',y='Synonymous mutation rate')
+p
+
+```
+
+\pagebreak
+# Rebuttal-only C
+```{r panel_c, width=8, height=5} 
+## compare the results from gene-level enrichment test between a model parameterized on all mutations as currently done
+## against a mode parameterized against (a) non-hotspot mutations and (b) silent mutations
+
+
+# load mutation data and prep it for four tests:
+# - original parameterization
+# - on non-hotspots
+# - on silent
+
+gene_info <- fread(here('data/gene_info.txt'),select=c('Hugo_Symbol','Role','panel_introduced','reptime','percentage_gene_gc_content',
+                                                       'cds_length','hic'))
+
+prep_data <- function(d) {
+    d <- d[exclude==F & 
+           putative_resistance_mutation==F,c('Tumor_Sample_Barcode','Hugo_Symbol','Variant_Type','Variant_Classification','tcn',
+                                             'putative_resistance_mutation','mutationid','high_tmb','hotspot_class'),with=F]
+    d <- merge(d, gene_info, by='Hugo_Symbol', all.x=T)
+
+    ## consider the TERT promoter as a unique gene, where the cds_length is now the total length of the promoter region covered by IMPACT
+    tert_promoter <- which(d$Hugo_Symbol=='TERT' & d$Variant_Classification=='TERT promoter')
+    d[tert_promoter, Hugo_Symbol:='TERT promoter']
+    d[tert_promoter, cds_length:=499] ## this is the length of the promoter region of TERT covered by IMPACT468
+    d[tert_promoter, percentage_gene_gc_content:=0.7896] ## this is the %GC content of TERT promoter region
+    
+    get_compound_rate_per_gene <- function(d) {
+        tbl <- table.freq(d$Tumor_Sample_Barcode)
+        samples <- tbl$value
+        compound_samples <- tbl$value[tbl$N > 1]
+        singleton_samples <- tbl$value[tbl$N == 1]
+
+        ## don't overcount multiple samples per patient
+        samples <- length(unique(strtrim(samples, 9)))
+        compounds <- length(unique(strtrim(compound_samples, 9)))
+        singletons <- length(unique(strtrim(singleton_samples, 9)))
+        tcn <- mean(d$tcn,na.rm=T)
+        list(singletons=singletons,compounds=compounds,samples=samples,tcn=tcn,
+             reptime=unique(d$reptime),percentage_gene_gc_content=unique(d$percentage_gene_gc_content),cds_length=unique(d$cds_length),
+             hic=unique(d$hic),
+             panel_introduced=unique(d$panel_introduced),Role=unique(d$Role))
+    }
+
+    res <- d[,get_compound_rate_per_gene(.SD),by=Hugo_Symbol]
+    res[is.nan(tcn),tcn:=2]
+    res$hic[is.na(res$hic)] <- round(mean(res$hic,na.rm=T))
+    res$panel_introduced <- factor(res$panel_introduced)
+    res$Hugo_Symbol <- gsub('-','_',res$Hugo_Symbol)
+    res$Hugo_Symbol <- gsub(' ','_',res$Hugo_Symbol)
+    res
+}
+
+d_orig <- fread(here('data/data_mutations.txt'))
+d_orig <- prep_data(d_orig)
+d_orig$class <- 'Original'
+d_orig$observed_proportion <- d_orig$compounds / d_orig$samples
+d_orig$compounds_orig <- d_orig$compounds
+d_orig$samples_orig <- d_orig$samples
+obs <- d_orig[,c('Hugo_Symbol','compounds_orig','samples_orig','observed_proportion'),with=F]
+
+d <- fread(here('data/data_mutations.txt'))
+d_nohs <- prep_data(d[hotspot_class=='',])
+d_nohs$class <- 'No hotspots'
+d_nohs <- merge(d_nohs, obs, by='Hugo_Symbol', all.x=T)
+
+d_si <- fread(here('data/data_mutations_silent.txt'))
+d_si <- prep_data(d_si)
+d_si$class <- 'Silent'
+d_si <- merge(d_si, obs, by='Hugo_Symbol', all.x=T)
+
+d_onc <- prep_data(d[Role=='Oncogene',])
+d_onc$class <- 'Oncogenes'
+d_onc <- merge(d_onc, obs, by='Hugo_Symbol', all.x=T)
+
+
+
+# Run the gene-enrichment binomial test on the different prepped datasets
+test_data <- function(res) { 
+    m <- glm.nb(compounds ~ offset(log(samples)) + reptime + cds_length + percentage_gene_gc_content + panel_introduced + tcn + hic, data=res)
+    summary(m)$coefficients
+    predictions <- predict(m,newdata=res,type='response')
+    res$predicted_proportion <- predictions / res$samples
+    dat <- res[,c('Hugo_Symbol','compounds','samples','predicted_proportion','observed_proportion','compounds_orig','samples_orig','Role'),with=F]
+
+    test_gene <-function(dat) {
+        x <- tryCatch({
+            tst <- binom.test(dat$compounds_orig,dat$samples_orig,dat$predicted_proportion,alternative='greater')
+            p.value <- tst$p.value
+            list(p.value=p.value)
+        },error=function(e) {
+            list(p.value=as.numeric(NA))
+        })
+        dat$p.value <- x$p.value
+        dat
+    }
+    dat <- dat[,test_gene(.SD),by=Hugo_Symbol]
+    dat$logOR <- log2(dat$observed_proportion/dat$predicted_proportion)
+    dat <- dat[order(p.value,decreasing=F),]
+    dat$q.value <- p.adjust(dat$p.value,method='BH')
+    dat
+}
+
+result_orig <- fread(here('data/gene_enrichment.txt'))
+setnames(result_orig,'q_enriched','q.value')
+result_orig <- result_orig[,c('Hugo_Symbol','q.value','Role'),with=F]
+labeled <- head(result_orig$Hugo_Symbol[result_orig$q.value < 0.01],10)
+
+## get results from parameterizing without hotspots
+result_nohs <- test_data(d_nohs)
+result_nohs <- result_nohs[,c('Hugo_Symbol','q.value'),with=F]
+result_nohs <- merge(result_nohs, result_orig, by='Hugo_Symbol', all.x=T)
+names(result_nohs) <- c('Hugo_Symbol','q_new','q_orig','Role')
+result_nohs$param <- 'No hotspots'
+
+## get results from parameterizing with only silent mutatsions
+result_si <- test_data(d_si)
+result_si <- result_si[,c('Hugo_Symbol','q.value'),with=F]
+result_si <- merge(result_si, result_orig, by='Hugo_Symbol', all.x=T)
+names(result_si) <- c('Hugo_Symbol','q_new','q_orig','Role')
+result_si$param <- 'Silent mutations'
+
+## merge them
+results <- rbind(result_nohs, result_si)
+results$label <- results$Hugo_Symbol
+results[Hugo_Symbol %nin% labeled,label:=NA]
+results$nlog10q_orig <- -log10(results$q_orig)
+results$nlog10q_new <- -log10(results$q_new)
+results[q_orig < 0.01,originally_enriched:='Yes']
+results[q_orig >= 0.01,originally_enriched:='No']
+
+
+### plot the comparisons 
+cols <- c('#2B91BA','#B7DAE9')
+names(cols) <- c('Yes','No')
+
+p <- ggplot(results, aes(x=nlog10q_orig,y=nlog10q_new)) +
+    geom_abline(slope=1,intercept=0,size=0.75,color='grey',linetype=2) +
+    geom_point(pch=21,color='black',aes(fill=originally_enriched),size=2.5) +
+    scale_fill_manual(values=cols,name='q<0.01 (original test)') +
+    geom_text_repel(aes(label=label),color='black') +
+    theme_std(base_size=16) +
+    theme(legend.position='bottom') +
+    facet_wrap(facets=~param,ncol=2,nrow=1) +
+    scale_x_continuous(limits=c(0,175),breaks=seq(0,150,by=50)) +
+    scale_y_continuous(limits=c(0,175),breaks=seq(0,150,by=50))
+p
+
+```
+
+\newpage
+# Rebuttal-only D
+```{r panel_d, width=8, height=5} 
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# plot QQ plot entirely for oncogenes
+# - NB this uses results from the previous R-chunk
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+## oncogenes later for QQ plot
+result_onc <- test_data(d_onc)
+result_onc <- result_onc[,c('Hugo_Symbol','p.value','q.value'),with=F]
+names(result_onc) <- c('Hugo_Symbol','p_enriched','q_enriched')
+
+# generate qqplot
+get_qqplot <- function(dat) {
+    N = nrow(dat)
+    ci <- 0.95
+    df <- data.table(observed=-log10(dat$p_enriched),
+                     expected=-log10(1:N/N),
+                     p=dat$p_enriched,
+                     q=dat$q_enriched,
+                     gene=dat$Hugo_Symbol,
+                     cupper=-log10(qbeta(ci,1:N, N - 1:N + 1)),
+                     clower=-log10(qbeta(1 - ci, 1:N, N - 1:N + 1)))
+    df$Significance <- ifelse(df$q < 0.01,'q < 0.01','Not significant')
+    df$Significance <- factor(df$Significance,levels=c('q < 0.01','Not significant'))
+    df$label <- df$gene
+    df$label[df$q >= 0.01] <- NA
+
+    ## make plot
+    log10Pe = expression(paste("Expected -log"[10], plain(P)))
+    log10Po = expression(paste("Observed -log"[10], plain(P)))
+    mycols <- c('#a6a6a6','#e50000')
+    names(mycols) <- c('Not significant','q < 0.01')
+    p <- ggplot(df,aes(x=expected,y=observed)) +
+        geom_point(pch=19, size=2.5, aes(color=Significance)) +
+        geom_abline(intercept=0, slope=1, alpha=0.5) +
+        geom_line(aes(expected, cupper), linetype=2) +
+        geom_line(aes(expected, clower), linetype=2) +
+        scale_color_manual(values=mycols) +
+        xlab(log10Pe) +
+        ylab(log10Po) +
+        geom_text_repel(aes(label=label), color='black',size=2.5, na.rm=T) +
+        theme_std(base_size=16)
+    p
+}
+
+p1 <- get_qqplot(result_onc) + 
+    ylim(80,100) +
+    theme(legend.position='none',axis.line.x=element_blank(),axis.ticks.x=element_blank(),axis.text.x=element_blank()) +
+    labs(x=NULL,y=NULL,subtitle='Enrichment for compound mutations among oncogenes') 
+    
+p2 <- get_qqplot(result_onc) + 
+    ylim(0,10) +
+    theme(legend.position='none')
+
+p <- plot_grid(p1,p2,rel_heights=c(1,3),align='v',ncol=1,nrow=2)
+p
+```
+
+
+\newpage
+# Rebuttal-only E
+```{r panel_e, width=5, height=8} 
+
+dat <- fread(here('data/rebuttal_only/mutation_order_bootstrapped_precalculated.txt'))
+dat_binom <- dat[,c('role','prop_first','prop_second','lwr_binom','upr_binom'),with=F]
+names(dat_binom) <- c('role','first','second','lwr','upr')
+dat_binom$method <- 'Original analysis'
+dat_boot <- dat[,c('role','prop_first','prop_second','lwr_boot','upr_boot'),with=F]
+names(dat_boot) <- c('role','first','second','lwr','upr')
+dat_boot$method <- 'Bootstrapped analysis'
+dat <- rbind(dat_binom, dat_boot)
+
+datm <- melt(dat,id.vars=c('method','role','lwr','upr'))
+datm[variable=='first',variable:='Yes']
+datm[variable=='second',variable:='No']
+datm[variable=='No',lwr:=NA]
+datm[variable=='No',upr:=NA]
+#datm[variable=='No',label:=NA]
+datm$value <- 100*datm$value; datm$lwr <- 100*datm$lwr; datm$upr <- 100*datm$upr
+setnames(datm,'variable','first')
+datm$first <- factor(datm$first, levels=c('No','Yes'))
+datm$method <- factor(datm$method, levels=c('Original analysis','Bootstrapped analysis'))
+cols <- c('#1B89AD','#B7DBEB')
+names(cols) <- c('Yes','No')
+
+p <- ggplot(datm, aes(x=role,y=value)) +
+    geom_bar(stat='identity',aes(fill=first)) +
+    #geom_text(aes(label=label),y=90) +
+    geom_errorbar(aes(min=value,max=upr),color='black',width=NA) +
+    geom_errorbar(aes(min=lwr,max=value),color='black',width=NA) +
+    geom_hline(yintercept=50,color='red',size=0.5,linetype='dashed') +
+    scale_fill_manual(values=cols, name='More prevalent allele\nmutated first:') +
+    theme_std(base_size=14) +
+    scale_y_continuous(expand=c(0,0)) +
+    labs(x=NULL,y='% timeable\ncompound mutations') + 
+    facet_wrap(facets=~method,ncol=2,nrow=1) + 
+    theme(strip.background=element_blank(),axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
+p
+
+```
+
+
+\newpage
+# Rebuttal-only F
+```{r panel_f, width=7, height=9} 
+
+
+## check whether nucleosome dyad position correlates with compound mutations
+## - for all mutations in compounds, check if they are within a 2001bp window centered at a dyad
+## - for the ones that are, get their distance from the nearest dyad, and then get the overall 
+## - number of mutations at each distance from the nearest dyad.
+
+d <- fread(here('data/data_mutations.txt'), 
+           select=c('metamaintype','exclude','putative_resistance_mutation','Tumor_Sample_Barcode','Hugo_Symbol','Chromosome','Start_Position','End_Position','Variant_Type'))
+
+## annotate mutations with if they are part of a compound
+d$tsbgene <- paste(d$Tumor_Sample_Barcode,d$Hugo_Symbol)
+tbl <- table.freq(d$tsbgene)
+d <- merge(d, tbl, by.x='tsbgene', by.y='value', all.x=T)
+
+## subset for SNPs, then merge with dyads centered within 1000bp of the SNP
+d$start <- d$Start_Position-1000
+d$end <- d$Start_Position+1000
+d <- d[exclude==F,] 
+
+dyads <- fread(here('data/dyads_genic.bed'))
+names(dyads) <- c('Chromosome','start','end')
+dyads$Chromosome <- gsub('chr','',dyads$Chromosome)
+setkey(dyads,'Chromosome','start','end')
+
+tabulate <- function(d, dyads) {
+    d <- d[Variant_Type=='SNP']
+    setkey(d,'Chromosome','start','end')
+
+    dd <- foverlaps(d, dyads, type='any')
+    dd_nodyad <- dd[is.na(start),] ## mutations not within 1000bp of any dyad
+    dd$distance_to_dyad <- dd$Start_Position-dd$start
+    dd[is.na(start),distance_to_dyad:=-9999]
+
+    ## tabulate number of SNPs at any distance to dyad
+    x <- table.freq(dd$distance_to_dyad)
+    x$distance <- as.integer(x$value)
+    x[,value:=NULL]
+    x
+}
+
+dat <- tabulate(d, dyads)
+dat$prop <- dat$N / sum(dat$N)
+dat <- dat[order(distance),]
+dat <- dat[distance >= -1e3 & distance <= 1e3]
+
+## fit a smooth spline to the data
+spl <- smooth.spline(x=dat$distance,y=dat$prop,spar=1)
+pred <- predict(spl)
+dat$pred <- pred$y
+
+max_amp <- max(dat$pred)
+dat$diff_from_halfmax <- abs(dat$pred - max_amp/2)
+lwr <- which(dat$diff_from_halfmax==min(dat$diff_from_halfmax[dat$distance < 0]))
+upr <- which(dat$diff_from_halfmax==min(dat$diff_from_halfmax[dat$distance > 0]))
+FWHM <- dat$distance[c(lwr,upr)]
+dm <- melt(dat[,c('distance','prop','pred'),with=F], id.vars='distance')
+dm[variable=='prop',variable:='Observed']
+dm[variable=='pred',variable:='Fit']
+
+cols <- c('#BFBFBF','steelblue')
+names(cols) <- c('Observed','Fit')
+
+p0 <- ggplot(dm,aes(x=distance,y=value)) +
+    geom_point(aes(color=variable)) +
+    scale_color_manual(values=cols,name=NULL) + 
+    geom_vline(xintercept=FWHM,color='black',linetype=2,size=0.5) +
+    xlim(c(-1000,1000)) + ylim(c(0,0.0003)) +
+    theme_std(base_size=12) + 
+    theme(legend.position='none') +
+    labs(x='Distance from dyad [bp]',y='Proportion of SNPs')
+
+
+
+## compare the fraction of singletons and compounds to fall within the FWHM range
+d_compound <- d[N > 1,]
+d_singleton <- d[N == 1,]
+ddc <- tabulate(d_compound, dyads)
+ddc$class <- 'SNPs in compounds'
+ddc$prop <- ddc$N / sum(ddc$N)
+dds <- tabulate(d_singleton, dyads)
+dds$class <- 'SNPs in singletons'
+dds$prop <- dds$N / sum(dds$N)
+dd <- rbind(ddc,dds)
+dd <- dd[order(distance,class)]
+dd$within_fwhm <- dd$distance >= FWHM[1] & dd$distance <= FWHM[2]
+
+x_c <- sum(dd$N[dd$within_fwhm==T & dd$class=='SNPs in compounds'])
+y_c <- sum(dd$N[dd$within_fwhm==F & dd$class=='SNPs in compounds'])
+N_c <- sum(dd$N[dd$class=='SNPs in compounds'])
+x_s <- sum(dd$N[dd$within_fwhm==T & dd$class=='SNPs in singletons'])
+y_s <- sum(dd$N[dd$within_fwhm==F & dd$class=='SNPs in singletons'])
+N_s <- sum(dd$N[dd$class=='SNPs in singletons'])
+
+ci <- binom::binom.confint(c(x_s,x_c),c(N_s,N_c),method='exact')
+ci$type <- c('Singleton','Compound')
+ci$mean <- 100*ci$mean
+ci$lower <- 100*ci$lower
+ci$upper <- 100*ci$upper
+
+m <- as.matrix(rbind(c(y_s,x_s),c(y_c,x_c)))
+pval <- prop.test(m)$p.value
+plabel <- paste0('P=',prettyNum(pval,digits=1))
+
+#library(ggsignif)
+p1 <- ggplot(ci,aes(x=type,y=mean)) +
+    geom_bar(stat='identity',fill='black') +
+    geom_signif(comparison=list(c('Compound','Singleton')),annotation=plabel,y_position=11.5) +
+    scale_y_continuous(expand=c(0,0),limits=c(0,12.5)) + 
+    geom_errorbar(aes(min=lower,max=mean,width=NA),size=1,color='white') +
+    geom_errorbar(aes(min=mean,max=upper,width=NA),size=1,color='black') +
+    theme_std(base_size=12) +
+    theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
+    labs(x=NULL,y='Proportion of SNPs')
+
+p <- plot_grid(p0, p1, ncol=2, rel_widths=c(3,1))
+p
+```
+
+
+\newpage
+# Rebuttal-only G
+```{r panel_g, width=6.5, height=7} 
+
+d <- fread(here('data/data_mutations_phased_all.txt'))
+d <- d[exclude==F & putative_resistance_mutation.1==F & putative_resistance_mutation.2==F,]
+d_ns <- d[Variant_Classification.1!='Silent' & Variant_Classification.2!='Silent',]
+d_ns$group <- 'Nonsyn.'
+d_si <- d[Variant_Classification.1=='Silent' | Variant_Classification.2=='Silent',]
+d_si$group <- '1+ silent'
+d <- rbind(d_ns, d_si)
+d <- d[same_cell_known==T & !is.na(ccf_Mcopies.1) & !is.na(ccf_Mcopies.2),]
+d$i <- 1:nrow(d)
+d[Role %nin% c('Oncogene','TSG'),Role:='Other']
+
+order_variant_classes <- function(d) {
+    classes <- sort(c(d$Variant_Classification.1,d$Variant_Classification.2))
+    combo <- paste(classes,collapse='+')
+    list(combo=combo)
+}
+res <- d[,order_variant_classes(.SD),by=c('Role','phase','group','i')]
+
+format <- function(d) {
+    cis <- sum(d$phase=='cis',na.rm=T)
+    trans <- sum(d$phase=='trans',na.rm=T)
+    list(cis=cis, trans=trans)
+}
+res <- res[,format(.SD),by=c('Role','group')]
+res <- res[Role != 'Other',]
+
+ci_trans <- binom::binom.confint(res$trans,(res$cis + res$trans),method='exact')
+res$prop_trans <- ci_trans$mean
+res$prop_cis <- 1-res$prop_trans
+res$lwr <- ci_trans$lower
+res$upr <- ci_trans$upper
+x <- melt(res[,c('Role','group','prop_cis','prop_trans','lwr','upr'),with=F],id.vars=c('Role','group','lwr','upr'))
+x[variable=='prop_cis',lwr:=NA]
+x[variable=='prop_cis',upr:=NA]
+x$variable <- gsub('prop_','',x$variable)
+x$variable <- factor(x$variable, levels=c('cis','trans'))
+
+## add 2-sample prop test p-values
+getp <- function(res) {
+    pval <- prop.test(res$trans,(res$cis+res$trans))$p.value
+    list(pval=pval)
+}
+info <- res[,getp(.SD),by=group]
+x <- merge(x, info, by='group', all.x=T)
+x$pval <- prettyNum(x$pval,digits=1)
+x$group <- paste0(x$group,' (P=',x$pval,')')
+
+## plot
+cols <- c('#B7DBEB','#2C92BB')
+names(cols) <- c('cis','trans')
+p <- ggplot(x, aes(x=Role,y=value)) +
+    geom_bar(stat='identity',aes(fill=variable)) +
+    scale_fill_manual(name='Phase',values=cols) +
+    geom_errorbar(aes(min=lwr,max=upr),width=NA) +
+    scale_y_continuous(expand=c(0,0)) +
+    facet_wrap(facets=~group,ncol=2) +
+    theme_std(base_size=16) +
+    labs(x=NULL,y='Proportion of compounds') +
+    theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
+p
+```
+
+
+
+

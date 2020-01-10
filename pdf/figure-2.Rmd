@@ -1,0 +1,473 @@
+---
+output: pdf_document
+chunk_output_type: console
+---
+
+
+```{r setup, include = FALSE, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, autodep = knitr::dep_prev())
+source(here::here('r/prerequisites.R'))
+d_clinical <- fread(here('data/data_clinical.txt'))
+
+## load starting datasets
+d_mutations <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','PATIENT_ID','exclude','Hugo_Symbol','Role','putative_resistance_mutation',
+                                                              'Variant_Classification','Variant_Type','tcn', 'mutationid', 'high_tmb','hotspot_class',
+                                                              'tm','hotspotid','HGVSp_Short','truncating','Reference_Allele','Tumor_Seq_Allele2',
+                                                              'Start_Position','End_Position'))
+d_phased <- fread(here('data/data_mutations_phased.txt'))
+
+## exclude duplicates from phasing data
+d_phased$id <- paste(d_phased$mutationid.1,d_phased$mutationid.2,sep=' + ')
+d_phased <- d_phased[!duplicated(id),]
+
+```
+
+### 2A
+```{r panel_a, fig.width=8,fig.height=10}
+
+## heatmap showing prevalence by tumortype of genes enriched for compounds 
+## add barplot above showing the observed/expected % of cases with compounds per lineage
+
+## get genes to plot
+genes <- fread(here('data/gene_enrichment_precalculated.txt'))
+genes_included <- genes$Hugo_Symbol[genes$q_enriched < 0.01]
+genes_included <- gsub('_','-',genes_included)
+
+## get cancer-types to plot
+ctypes <- fread(here('data/cancertype_enrichment_permutation_test_precalculated.txt'))
+ctypes <- ctypes[tumortype!='Other',]
+ctypes <- ctypes[order(obs,decreasing=F),]
+included_types <- ctypes$tumortype[ctypes$N >= 100]
+ctypes <- ctypes[tumortype %in% included_types,]
+
+## get compound rate per gene per maintype
+d <- fread(here('data/data_mutations.txt'), 
+	select=c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol','exclude','putative_resistance_mutation'))
+d <- d[putative_resistance_mutation==F & exclude==F , c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol'),with=F]
+d <- d[Hugo_Symbol %in% genes_included & metamaintype %in% ctypes$tumortype,]
+
+count_patients <- function(d) {
+    tbl <- table.freq(d$Tumor_Sample_Barcode)
+    samples <- tbl$value
+    compound_samples <- tbl$value[tbl$N > 1]
+    ns <- length(unique(strtrim(samples,9)))
+    nc <- length(unique(strtrim(compound_samples,9)))
+    list(n_patients=ns, n_compound=nc)
+}
+
+info <- d[,count_patients(.SD),by=c('Hugo_Symbol','metamaintype')]
+info$prop <- info$n_compound / info$n_patients
+info$Hugo_Symbol <- factor(info$Hugo_Symbol, levels=rev(sortunique(genes_included)))
+info$metamaintype <- factor(info$metamaintype, levels=ctypes$tumortype)
+
+m_prop <- reshape(info[,c('metamaintype','Hugo_Symbol','prop'),with=F],timevar='metamaintype',idvar='Hugo_Symbol',direction='wide')
+m_prop_melt <- melt(m_prop)
+m_prop_melt$variable <- gsub('prop[.]','',m_prop_melt$variable)
+setnames(m_prop_melt,'value','prop')
+
+m_n <- reshape(info[,c('metamaintype','Hugo_Symbol','n_compound'),with=F],timevar='metamaintype',idvar='Hugo_Symbol',direction='wide')
+m_n_melt <- melt(m_n)
+m_n_melt[value==0,value:=NA]
+m_n_melt$variable <- gsub('n_compound[.]','',m_n_melt$variable)
+setnames(m_n_melt,'value','n')
+
+pd <- merge(m_n_melt,m_prop_melt,by=c('Hugo_Symbol','variable'),all=T)
+pd$variable <- factor(pd$variable, levels=ctypes$tumortype)
+setnames(pd,'variable','metamaintype')
+pd[n < 5, n:=NA]
+pd[is.na(n),prop:=NA]
+
+## plot the heatmap
+p_heatmap <- ggplot(pd, aes(x=metamaintype,y=Hugo_Symbol)) +
+    geom_point(pch=21,color='black',aes(fill=prop,size=n)) +
+    scale_fill_gradient(low='white',high='steelblue') +
+    theme_bw(base_size=14) +
+    theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
+p_heatmap <- extract_gglegend(p_heatmap)
+
+## prep data for side-by-side obs:exp barplots
+pd2 <- ctypes
+pd2$tumortype <- factor(pd2$tumortype, levels=pd2$tumortype)
+pd2$obs <- 100*pd2$obs
+pd2[,mu:=100*mu]
+pd2[,lwr:=100*lwr]
+pd2[,upr:=100*upr]
+
+pd2.exp <- pd2[,c('tumortype','mu','lwr','upr'),with=F]
+names(pd2.exp) <- c('tt','mu','lwr','upr')
+pd2.exp$type <- 'Expected'
+
+ci <- as.data.table(binom.confint(pd2$x,pd2$N,method='exact'))
+ci$tumortype <- pd2$tumortype
+
+pd2.obs <- pd2[,c('tumortype','obs'),with=F]
+names(pd2.obs) <- c('tt','mu')
+pd2.obs$type <- 'Observed'
+
+pd3 <- rbind(pd2.exp,pd2.obs, fill=T)
+pd3 <- merge(pd3, pd2[,c('tumortype','q.value','logOR'),with=F], by.x='tt', by.y='tumortype',all.x=T)
+pd3$direction <- 'Not significant (q>=0.01)'
+pd3[logOR < 0 & q.value < 0.01,direction:='Depleted']
+pd3[logOR > 0 & q.value < 0.01,direction:='Enriched']
+pd3$tt <- factor(pd3$tt, levels=levels(pd2$tumortype))
+
+cols <- c('steelblue','#BFBFBF')
+names(cols) <- c('Observed','Expected')
+
+p_hist <- ggplot(pd3, aes(x=tt,y=mu,group=type)) +
+    geom_bar(stat='identity',aes(fill=type),position=position_dodge(width=0.9),color='white') +
+    scale_fill_manual(values=cols,name='Enrichment') + 
+    geom_errorbar(aes(min=lwr,max=upr),position=position_dodge(width=0.9),width=NA,color='black') +
+    theme_std(base_size=14) +
+    scale_y_continuous(expand=c(0,0),breaks=seq(0,60,by=20),limits=c(0,60)) +
+    theme(axis.text.x=element_blank(),axis.ticks.x=element_blank()) +
+    labs(x=NULL,y='% of cases')
+p_hist <- extract_gglegend(p_hist)
+
+p <- plot_grid(p_hist$plot, p_heatmap$plot, align='v', ncol=1, nrow=2,rel_heights=c(1,6))    
+p_legend <- plot_grid(p_hist$legend, p_heatmap$legend, align='v', ncol=1, nrow=2)    
+p <- plot_grid(p, p_legend, ncol=2, nrow=1, rel_widths=c(6,1))    
+p
+
+```
+
+
+### 2B
+```{r panel_b, fig.width=7,fig.height=6}
+
+## load phased data (using the pairwise-combos)
+d <- fread(here('data/gene_enrichment_precalculated.txt'))
+
+# generate qqplot
+get_qqplot <- function(dat) {
+    # with influence from
+    # Kamil Slowikowski
+    # February 16, 2014
+    # https://slowkow.com/notes/ggplot2-qqplot/
+
+    N = nrow(dat)
+    ci <- 0.95
+    df <- data.table(observed=-log10(dat$p_enriched),
+                     expected=-log10(1:N/N),
+                     p=dat$p_enriched,
+                     q=dat$q_enriched,
+                     gene=dat$Hugo_Symbol,
+                     Role=dat$Role,
+                     cupper=-log10(qbeta(ci,1:N, N - 1:N + 1)),
+                     clower=-log10(qbeta(1 - ci, 1:N, N - 1:N + 1)))
+    df$Significance <- ifelse(df$q < 0.01,'q < 0.01','Not significant')
+    df$Significance <- factor(df$Significance,levels=c('q < 0.01','Not significant'))
+
+    df[Significance=='q < 0.01' & Role %nin% c('Oncogene','TSG'),Role:='Other']
+    df[Significance=='Not significant',Role:='Not significant']
+    df$Role <- factor(df$Role, levels=c('Oncogene','TSG','Other','Not significant'))
+
+    role_cols <- c('#EE7C65','#1B89AD','#58595B','#A6A5A4'); names(role_cols) <- levels(df$Role)
+    df$label <- df$gene
+    df$label[df$q >= 0.01] <- NA
+    df[p >= 1e-10 & label %nin% c('CDKN2A','FGFR3','FOXA1','NTRK3','ERBB4','PDGFRA'),label:=NA]
+
+    ## make plot
+    log10Pe = expression(paste("Expected -log"[10], plain(P)))
+    log10Po = expression(paste("Observed -log"[10], plain(P)))
+    mycols <- c('#a6a6a6','#e50000')
+    names(mycols) <- c('Not significant','q < 0.01')
+    p <- ggplot(df,aes(x=expected,y=observed)) +
+        geom_point(pch=19, size=2.5, aes(color=Role)) +
+        geom_abline(intercept=0, slope=1, alpha=0.5) +
+        geom_line(aes(expected, cupper), linetype=2) +
+        geom_line(aes(expected, clower), linetype=2) +
+        scale_color_manual(values=role_cols) +
+        xlab(log10Pe) +
+        ylab(log10Po) +
+        geom_text_repel(aes(label=label), color='black', na.rm=T) +
+        theme_std(base_size=14)
+    p
+}
+
+p1 <- get_qqplot(d) +
+    theme(legend.position='none',axis.line.x=element_blank(),axis.ticks.x=element_blank(),axis.text.x=element_blank()) +
+    scale_y_continuous(limits=c(40,150),breaks=seq(50,150,by=50)) + 
+    labs(x=NULL,y=NULL,title='Enrichment for compound mutations') 
+    
+p2 <- get_qqplot(d[q_enriched > 0,]) + 
+    ylim(0,30) +
+    theme(legend.position='none')
+
+p <- plot_grid(p1,p2,rel_heights=c(1,3),align='v',ncol=1,nrow=2)
+p
+
+```
+
+\pagebreak
+### 2C
+
+```{r panel_c, fig.width=6, fig.height=6}
+
+## load MAF, subset for hotspot SNPs among valid samples
+d <- d_mutations
+d <- d[exclude==F & putative_resistance_mutation==F,]
+dd <- d[Variant_Classification %in% 'Missense_Mutation',]
+dd[hotspot_class=='3d',hotspot:=F]
+dd[hotspot_class=='3d',hotspot_class:='']
+
+## annotate if the sample-gene is singleton or multiplet
+dd$id <- paste(dd$Tumor_Sample_Barcode,dd$Hugo_Symbol)
+tbl <- table.freq(dd$id)
+singleton <- tbl$value[tbl$N==1]
+compound <- tbl$value[tbl$N>1]
+dd$compound <- dd$id %in% compound
+
+## get total number of singletons and compound mutations
+dd$pid_gene <- paste(dd$PATIENT_ID,dd$Hugo_Symbol)
+total_number_singleton_mutations <- length(unique(dd$pid_gene[dd$compound==F]))
+total_number_compound_mutations <- length(unique(dd$pid_gene[dd$compound==T]))
+total_number_mutations <- length(unique(dd$pid_gene))
+
+## for each hotspot, count the numnber of mutant, singleton and multiplet samples
+summarize_individual_hotspot <- function(query.hotspot,d) {
+    ## count affected singleton/multiplet samples
+    mutant_samples <- sortunique(d$Tumor_Sample_Barcode[d$tm %in% query.hotspot])
+    singleton_samples <- sortunique(d$Tumor_Sample_Barcode[d$tm %in% query.hotspot & d$compound==F])
+    multiplet_samples <- sortunique(d$Tumor_Sample_Barcode[d$tm %in% query.hotspot & d$compound==T])
+
+    ## don't overcount patients with 2+ samples
+    mutant_samples <- unique(strtrim(mutant_samples,9))
+    singleton_samples <- unique(strtrim(singleton_samples,9))
+    multiplet_samples <- unique(strtrim(multiplet_samples,9))
+
+    n.mutant <- length(mutant_samples)
+    n.singletons <- length(singleton_samples)
+    n.multiplets <- length(multiplet_samples)
+    list(hotspot=query.hotspot,n.mutant=n.mutant,n.singletons=n.singletons,n.multiplets=n.multiplets)
+}
+hotspots <- sortunique(dd$hotspotid)
+hotspots <- hotspots[hotspots!='']
+message('Counting singleton/compound samples at each hotspot (will take some time) ...')
+l <- lapply(hotspots, summarize_individual_hotspot, dd)
+message('Done!')
+ll <- rbindlist(l)
+ll <- ll[order(n.mutant,decreasing=T),]
+ll$x.order <- 1:nrow(ll)
+
+## get total number of singleton and multiplet mutations (this includes among non-hotspots)
+ll$p.singletons <- cumsum(ll$n.singletons / total_number_singleton_mutations)
+ll$p.multiplets <- cumsum(ll$n.multiplets / total_number_compound_mutations)
+ll$p.mutant <- cumsum(ll$n.mutant / total_number_mutations)
+
+## prep data for plot
+toadd <- data.table(hotspot='none',n.mutant=NA,n.singletons=NA,n.multiplets=NA,x.order=0,p.mutant=0,p.singletons=0,p.multiplets=0)
+pdat <- rbind(toadd,ll)
+pdat <- melt(pdat[,c('hotspot','x.order','p.singletons','p.multiplets'),with=F],id.var=c('x.order','hotspot'))
+pdat$Class <- ''
+pdat[variable=='p.singletons',Class:='% of all singletons']
+pdat[variable=='p.multiplets',Class:='% of all compound mutations']
+pdat$Class <- factor(pdat$Class,levels=c('% of all singletons','% of all compound mutations'))
+cols <- colors$compound
+names(cols) <- levels(pdat$Class)
+
+## plot
+p1 <- ggplot(pdat,aes(x=x.order)) +
+    geom_line(aes(x=x.order,y=value,color=Class),size=1) +
+    labs(x='Hotspot residues (decreasing mutation frequency)',y='% of all mutations') + 
+    scale_y_continuous(expand=c(0,0),labels=scales::percent,limits=c(0,0.8)) +
+    scale_color_manual(values=cols,name=NULL) +
+    theme_std(base_size=14)+
+    xlim(c(0,300)) +
+    theme(legend.position='bottom')
+
+
+## get data for inset plot
+d <- d_mutations
+d <- d[exclude==F & putative_resistance_mutation==F,]
+dd <- d[Variant_Classification %in% 'Missense_Mutation',]
+dd[hotspot_class=='3d',hotspot:=F]
+dd[hotspot_class=='3d',hotspot_class:='']
+
+## annotate if the sample-gene is singleton or multiplet
+dd$id <- paste(dd$Tumor_Sample_Barcode,dd$Hugo_Symbol)
+tbl <- table.freq(dd$id)
+singleton <- tbl$value[tbl$N==1]
+compound <- tbl$value[tbl$N>1]
+dd$compound <- dd$id %in% compound
+
+## get number of singletons and compounds, and same for those with hotspots
+compounds <- dd[compound==T,]
+singletons <- dd[compound==F,]
+tbl_compound <- table(compounds$hotspotid!='')
+tbl_singleton <- table(singletons$hotspotid!='')
+x <- c(tbl_compound[['TRUE']], tbl_singleton[['TRUE']])
+n <- c(nrow(compounds),nrow(singletons))
+
+## prep data for plot
+ci <- adt(binom.confint(x,n,method='exact'))
+ci$mutation <- c('compound','singleton')
+ci$mutation <- factor(ci$mutation, levels=rev(c('singleton','compound')))
+ci$mean <- 100*ci$mean
+ci$lower <- 100*ci$lower
+ci$upper <- 100*ci$upper
+pval <- prop.test(x,n,alternative='two.sided')$p.value
+pval <- paste0('p=',prettyNum(pval,digits=1))
+
+## offset data by 25 to force plot range from 25-40
+## (adjust the labels in plot accordingly)
+ci[,mean:=mean-25]
+ci[,lower:=lower-25]
+ci[,upper:=upper-25]
+
+## plot
+p2 <- ggplot(ci,aes(x=mutation, y=mean)) +
+    geom_bar(stat='identity',fill='black') +
+    geom_signif(comparison=list(c('compound','singleton')),annotation=pval,y_position=(37.5-26)) + 
+    geom_errorbar(aes(min=lower,max=mean),color='white',width=0) +
+    geom_errorbar(aes(min=mean,max=upper),color='black',width=0) +
+    scale_y_continuous(expand=c(0,0),breaks=seq(0,15,by=5), labels=seq(25,40,by=5), limits=c(0,15), position='right') +
+    theme_std(base_size=14) +
+    theme(axis.text.x=element_text(angle=0,hjust=0.5,vjust=0),plot.margin = margin(0.2, 3.5, 0.2, 3.5, "cm")) + 
+    coord_flip() + 
+    labs(x=NULL,y='% hotspots')
+
+## show the combined plot
+p <- plot_grid(p2, p1, rel_heights=c(1,4), ncol=1, nrow=2)
+p
+
+```
+
+\pagebreak
+### 2D
+
+```{r, panel_d, fig.width=5, fig.height=6}
+
+get_ordered_variants <- function(d_phased, d_mutations) {
+    d_phased <- d_phased[putative_resistance_mutation.1==F & putative_resistance_mutation.2==F & exclude==F,]
+    d_phased[hotspotid.1!='',tm.1:=hotspotid.1] ## this will group IF-INDEL hotspots
+    d_phased[hotspotid.2!='',tm.2:=hotspotid.2]
+    d_phased$functional.1 <- d_phased$hotspotid.1!='' | d_phased$oncogenic.1 %in% c('Oncogenic','Likely Oncogenic','Predicted Oncogenic') |
+    (d_phased$Role %in% c('TSG','Oncogene/TSG') & d_phased$truncating.1==T) | d_phased$Variant_Classification.1=='TERT promoter'
+    d_phased$functional.2 <- d_phased$hotspotid.2!='' | d_phased$oncogenic.2 %in% c('Oncogenic','Likely Oncogenic','Predicted Oncogenic') |
+    (d_phased$Role %in% c('TSG','Oncogene/TSG') & d_phased$truncating.2==T) | d_phased$Variant_Classification.2=='TERT promoter'
+
+    d_phased[Variant_Classification.1 %in% c('TERT promoter'),tm.1:=paste0('TERT ',gsub('p[.]','',HGVSp_Short.1))]
+    d_phased[Variant_Classification.1 %in% c('Splice_Site','Nonsense_Mutation','Frame_Shift_Del','Frame_Shift_Ins'), tm.1:=paste(Hugo_Symbol,'Truncating')]
+    d_phased[Variant_Classification.2 %in% c('TERT promoter'),tm.2:=paste0('TERT ',gsub('p[.]','',HGVSp_Short.2))]
+    d_phased[Variant_Classification.2 %in% c('Splice_Site','Nonsense_Mutation','Frame_Shift_Del','Frame_Shift_Ins'), tm.2:=paste(Hugo_Symbol,'Truncating')]
+
+    d_phased <- d_phased[,c('Tumor_Sample_Barcode','Role','Hugo_Symbol','hotspot.1','hotspot.2','functional.1','functional.2',
+              'tm.1','tm.2','phase','common_reads_alt1_alt2',
+              'common_reads_alt1_ref2','common_reads_ref1_alt2','ccf_Mcopies_lower.1','ccf_Mcopies_upper.1',
+              'ccf_Mcopies_lower.2','ccf_Mcopies_upper.2','Variant_Classification.1','Variant_Classification.2','phase','same_cell_known'),with=F]
+
+    d_phased$firstallele <- ''
+    d_phased$secondallele <- ''
+    d_phased[ccf_Mcopies_lower.1 > ccf_Mcopies_upper.2,firstallele:=tm.1]
+    d_phased[ccf_Mcopies_lower.1 > ccf_Mcopies_upper.2,secondallele:=tm.2]
+    d_phased[ccf_Mcopies_upper.1 < ccf_Mcopies_lower.2,firstallele:=tm.2]
+    d_phased[ccf_Mcopies_upper.1 < ccf_Mcopies_lower.2,secondallele:=tm.1]
+    dd <- d_phased[,c('Tumor_Sample_Barcode','Role','Hugo_Symbol','firstallele','secondallele','phase','same_cell_known','hotspot.1','hotspot.2',
+               'functional.1','functional.2','Variant_Classification.1','Variant_Classification.2'),with=F]
+    dd <- dd[firstallele!='' & secondallele!='',]
+
+    ## get number of unique patients with each mutation
+    d_mutations <- d_mutations[exclude==F & putative_resistance_mutation==F,]
+    d_mutations$functional <- d_mutations$hotspot==T | d_mutations$oncogenic %in% c('Oncogenic','Likely Oncogenic','Predicted Oncogenic') |
+    (d_mutations$Role %in% c('TSG','Oncogene/TSG') & d_mutations$truncating==T) | d_mutations$Variant_Classification=='TERT promoter'
+    d_mutations[Variant_Classification %in% c('TERT promoter'),tm:=paste0('TERT ',gsub('p[.]','',HGVSp_Short))]
+    d_mutations[Variant_Classification %in% c('Splice_Site','Nonsense_Mutation','Frame_Shift_Del','Frame_Shift_Ins'), tm:=paste(Hugo_Symbol,'Truncating')]
+    d_mutations[hotspotid!='',tm:=hotspotid] ## this will group IF-INDEL hotspots
+
+    getN <- function(d_mutations) {
+        N <- length(unique(strtrim(d_mutations$Tumor_Sample_Barcode,9)))
+        list(N=N)
+    }
+    tbl <- d_mutations[,getN(.SD),by=tm]
+    setnames(tbl,'tm','value')
+
+    ## annotate first and second hits with their prevalence across full dataset
+    dd2 <- merge(dd, tbl, by.x='firstallele', by.y='value', all.x=T)
+    setnames(dd2,'N','firstallele_N')
+    dd2 <- merge(dd2, tbl, by.x='secondallele', by.y='value', all.x=T)
+    setnames(dd2,'N','secondallele_N')
+    tbl_gene <- table.freq(d_mutations$Hugo_Symbol)
+    dd2 <- merge(dd2, tbl_gene, by.x='Hugo_Symbol', by.y='value', all.x=T)
+    setnames(dd2,'N','totalN')
+
+    ## compare prevalence of each hit for signficantly more prevalent:
+    first_ci <- binom::binom.confint(dd2$firstallele_N, dd2$totalN, method='exact')
+    second_ci <- binom::binom.confint(dd2$secondallele_N, dd2$totalN, method='exact')
+    dd2$prop_samples_with_first_allele <- first_ci$mean
+    dd2$prop_samples_with_first_allele_lwr <- first_ci$lower
+    dd2$prop_samples_with_first_allele_upr <- first_ci$upper
+    dd2$prop_samples_with_second_allele <- second_ci$mean
+    dd2$prop_samples_with_second_allele_lwr <- second_ci$lower
+    dd2$prop_samples_with_second_allele_upr <- second_ci$upper
+    dd2$more_common_allele <- 'no difference'
+    dd2[prop_samples_with_first_allele_lwr > prop_samples_with_second_allele_upr, more_common_allele:='first']
+    dd2[prop_samples_with_first_allele_upr < prop_samples_with_second_allele_lwr, more_common_allele:='second']
+    dd2$Hugo_Symbol <- as.character(dd2$Hugo_Symbol)
+    dd2$firstallele <- as.character(dd2$firstallele)
+    dd2$secondallele <- as.character(dd2$secondallele)
+    dd2
+}
+
+## plot rate of 1st more prevalent vs 2nd more prevalent
+dat <- get_ordered_variants(d_phased, d_mutations)
+dat <- dat[same_cell_known==T | phase=='cis',] ## only consider compounds definitely in same cell
+dat$n_functional <- dat$functional.1 + dat$functional.2
+dat <- dat[n_functional == 2,]
+dat <- dat[more_common_allele!='no difference',]
+
+m <- as.data.frame.matrix(xtabs(~Role + more_common_allele, data=dat[Role %in% c('Oncogene','TSG')]))
+m$overall <- m$first + m$second
+
+## for both Onc/TSG, test if ratio is sig different than 50% (binomial test)
+onc_p <- binom.test(m$first[1], m$overall[1], p=0.5,alternative='two.sided')$p.value
+tsg_p <- binom.test(m$first[2], m$overall[2], p=0.5,alternative='two.sided')$p.value
+
+## format for the plot
+ci <- adt(binom.confint(m$first, m$overall, method='exact'))
+ci$role <- rownames(m)
+m <- cbind(role=rownames(m), adt(ci))
+m1 <- m[,c('role','mean'),with=F]
+m1$first <- 'Yes'
+m2 <- m[,c('role','mean'),with=F]
+m2$mean <- 1-m2$mean
+m2$first <- 'No'
+m <- rbind(m1,m2)
+m$mean <- 100*m$mean
+ci$lower <- ci$lower * 100
+ci$upper <- ci$upper * 100
+ci$mean <- ci$mean * 100
+ci1 <- ci
+ci1$first <- 'Yes'
+ci2 <- ci
+ci2$first <- 'No'
+ci2[,lower:=NA]
+ci2[,upper:=NA]
+ci2[,mean:=NA]
+ci <- rbind(ci1,ci2)
+
+m$first <- factor(m$first, levels=c('No','Yes'))
+ci$first <- factor(ci$first, levels=c('No','Yes'))
+m <- m[order(role,first),]
+ci <- ci[order(role,first),]
+cols <- rev(colors$barplot2col)
+names(cols) <- levels(m$first)
+plabs <- paste0('P=',prettyNum(c(onc_p,tsg_p),digits=1))
+m$label <- as.character(NA)
+m[first=='Yes',label:=plabs]
+
+p <- ggplot(m, aes(x=role,y=mean)) +
+    geom_bar(stat='identity',aes(fill=first)) + 
+    geom_text(aes(label=label),y=90) + 
+    geom_errorbar(data=ci, aes(min=`mean`,max=upper),color='black',width=0) +
+    geom_errorbar(data=ci, aes(min=lower,max=`mean`),color='white',width=0) +
+    geom_hline(yintercept=50,color='red',size=0.5,linetype='dashed') +
+    scale_fill_manual(values=cols, name='More prevalent allele\nmutated first:') +
+    theme_std(base_size=14) +
+    scale_y_continuous(expand=c(0,0)) + 
+    labs(x=NULL,y='% timeable\ncompound mutations', subtitle='More prevalent allele\nmutated first') +
+    theme(strip.background=element_blank())
+p
+
+```
+
