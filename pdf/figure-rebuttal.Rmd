@@ -12,28 +12,120 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, autodep = 
 source(here::here('r/prerequisites.R'))
 ```
 
+\newpage
 # Rebuttal-only A
-```{r panel_a, width=6, height=7}
+```{r panel_a, width=6.5, height=7} 
 
-## cohort sample-type breakdown
-d <- fread(here('data/data_clinical.txt'))
-tbl <- table.freq(d$metamaintype)
-type_order <- c(tbl$value[tbl$value!='Other'],'Other')
-tbl$metamaintype <- factor(tbl$value, levels=(type_order))
+d <- fread(here('data/data_mutations_phased_all.txt'))
+d <- d[exclude==F & putative_resistance_mutation.1==F & putative_resistance_mutation.2==F,]
+d_ns <- d[Variant_Classification.1!='Silent' & Variant_Classification.2!='Silent',]
+d_ns$group <- 'Nonsyn.'
+d_si <- d[Variant_Classification.1=='Silent' | Variant_Classification.2=='Silent',]
+d_si$group <- '1+ silent'
+d <- rbind(d_ns, d_si)
+d <- d[same_cell_known==T & !is.na(ccf_Mcopies.1) & !is.na(ccf_Mcopies.2),]
+d$i <- 1:nrow(d)
+d[Role %nin% c('Oncogene','TSG'),Role:='Other']
 
-p <- ggplot(tbl,aes(x=metamaintype,y=N)) +
-    geom_bar(stat='identity',color='white',fill='black',size=0.2) + 
+order_variant_classes <- function(d) {
+    classes <- sort(c(d$Variant_Classification.1,d$Variant_Classification.2))
+    combo <- paste(classes,collapse='+')
+    list(combo=combo)
+}
+res <- d[,order_variant_classes(.SD),by=c('Role','phase','group','i')]
+
+format <- function(d) {
+    cis <- sum(d$phase=='cis',na.rm=T)
+    trans <- sum(d$phase=='trans',na.rm=T)
+    list(cis=cis, trans=trans)
+}
+res <- res[,format(.SD),by=c('Role','group')]
+res <- res[Role != 'Other',]
+
+ci_trans <- binom::binom.confint(res$trans,(res$cis + res$trans),method='exact')
+res$prop_trans <- ci_trans$mean
+res$prop_cis <- 1-res$prop_trans
+res$lwr <- ci_trans$lower
+res$upr <- ci_trans$upper
+x <- melt(res[,c('Role','group','prop_cis','prop_trans','lwr','upr'),with=F],id.vars=c('Role','group','lwr','upr'))
+x[variable=='prop_cis',lwr:=NA]
+x[variable=='prop_cis',upr:=NA]
+x$variable <- gsub('prop_','',x$variable)
+x$variable <- factor(x$variable, levels=c('cis','trans'))
+
+## add 2-sample prop test p-values
+getp <- function(res) {
+    pval <- prop.test(res$trans,(res$cis+res$trans))$p.value
+    list(pval=pval)
+}
+info <- res[,getp(.SD),by=group]
+x <- merge(x, info, by='group', all.x=T)
+x$pval <- prettyNum(x$pval,digits=1)
+x$group <- paste0(x$group,' (P=',x$pval,')')
+
+## plot
+cols <- c('#B7DBEB','#2C92BB')
+names(cols) <- c('cis','trans')
+p <- ggplot(x, aes(x=Role,y=value)) +
+    geom_bar(stat='identity',aes(fill=variable)) +
+    scale_fill_manual(name='Phase',values=cols) +
+    geom_errorbar(aes(min=lwr,max=upr),width=NA) +
     scale_y_continuous(expand=c(0,0)) +
+    facet_wrap(facets=~group,ncol=2) +
+    theme_std(base_size=16) +
+    labs(x=NULL,y='Proportion of compounds') +
+    theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
+p
+```
+
+
+\newpage
+# Rebuttal-only B
+```{r panel_b, width=5, height=8} 
+
+dat <- fread(here('data/rebuttal_only/mutation_order_bootstrapped_precalculated.txt'))
+dat_binom <- dat[,c('role','prop_first','prop_second','lwr_binom','upr_binom'),with=F]
+names(dat_binom) <- c('role','first','second','lwr','upr')
+dat_binom$method <- 'Original analysis'
+dat_boot <- dat[,c('role','prop_first','prop_second','lwr_boot','upr_boot'),with=F]
+names(dat_boot) <- c('role','first','second','lwr','upr')
+dat_boot$method <- 'Bootstrapped analysis'
+dat <- rbind(dat_binom, dat_boot)
+
+datm <- melt(dat,id.vars=c('method','role','lwr','upr'))
+datm[variable=='first',variable:='Yes']
+datm[variable=='second',variable:='No']
+datm[variable=='No',lwr:=NA]
+datm[variable=='No',upr:=NA]
+#datm[variable=='No',label:=NA]
+datm$value <- 100*datm$value; datm$lwr <- 100*datm$lwr; datm$upr <- 100*datm$upr
+setnames(datm,'variable','first')
+datm$first <- factor(datm$first, levels=c('No','Yes'))
+datm$method <- factor(datm$method, levels=c('Original analysis','Bootstrapped analysis'))
+cols <- c('#1B89AD','#B7DBEB')
+names(cols) <- c('Yes','No')
+
+p <- ggplot(datm, aes(x=role,y=value)) +
+    geom_bar(stat='identity',aes(fill=first)) +
+    #geom_text(aes(label=label),y=90) +
+    geom_errorbar(aes(min=value,max=upr),color='black',width=NA) +
+    geom_errorbar(aes(min=lwr,max=value),color='black',width=NA) +
+    geom_hline(yintercept=50,color='red',size=0.5,linetype='dashed') +
+    scale_fill_manual(values=cols, name='More prevalent allele\nmutated first:') +
     theme_std(base_size=14) +
-    theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
-    labs(x=NULL,y='Number of samples') 
+    scale_y_continuous(expand=c(0,0)) +
+    labs(x=NULL,y='% timeable\ncompound mutations') + 
+    facet_wrap(facets=~method,ncol=2,nrow=1) + 
+    theme(strip.background=element_blank(),axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
 p
 
 ```
 
+
+
 \pagebreak
-# Rebuttal-only B
-```{r panel_b, width=5, height=6}
+# Rebuttal-only C
+```{r panel_c, width=5, height=6}
 
 d_si <- fread(here('data/data_mutations_silent.txt'))
 count <- function(d) {
@@ -77,8 +169,8 @@ p
 ```
 
 \pagebreak
-# Rebuttal-only C
-```{r panel_c, width=8, height=5} 
+# Rebuttal-only D
+```{r panel_d, width=8, height=5} 
 ## compare the results from gene-level enrichment test between a model parameterized on all mutations as currently done
 ## against a mode parameterized against (a) non-hotspot mutations and (b) silent mutations
 
@@ -226,114 +318,10 @@ p
 
 ```
 
-\newpage
-# Rebuttal-only D
-```{r panel_d, width=8, height=5} 
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# plot QQ plot entirely for oncogenes
-# - NB this uses results from the previous R-chunk
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-## oncogenes later for QQ plot
-result_onc <- test_data(d_onc)
-result_onc <- result_onc[,c('Hugo_Symbol','p.value','q.value'),with=F]
-names(result_onc) <- c('Hugo_Symbol','p_enriched','q_enriched')
-
-# generate qqplot
-get_qqplot <- function(dat) {
-    N = nrow(dat)
-    ci <- 0.95
-    df <- data.table(observed=-log10(dat$p_enriched),
-                     expected=-log10(1:N/N),
-                     p=dat$p_enriched,
-                     q=dat$q_enriched,
-                     gene=dat$Hugo_Symbol,
-                     cupper=-log10(qbeta(ci,1:N, N - 1:N + 1)),
-                     clower=-log10(qbeta(1 - ci, 1:N, N - 1:N + 1)))
-    df$Significance <- ifelse(df$q < 0.01,'q < 0.01','Not significant')
-    df$Significance <- factor(df$Significance,levels=c('q < 0.01','Not significant'))
-    df$label <- df$gene
-    df$label[df$q >= 0.01] <- NA
-
-    ## make plot
-    log10Pe = expression(paste("Expected -log"[10], plain(P)))
-    log10Po = expression(paste("Observed -log"[10], plain(P)))
-    mycols <- c('#a6a6a6','#e50000')
-    names(mycols) <- c('Not significant','q < 0.01')
-    p <- ggplot(df,aes(x=expected,y=observed)) +
-        geom_point(pch=19, size=2.5, aes(color=Significance)) +
-        geom_abline(intercept=0, slope=1, alpha=0.5) +
-        geom_line(aes(expected, cupper), linetype=2) +
-        geom_line(aes(expected, clower), linetype=2) +
-        scale_color_manual(values=mycols) +
-        xlab(log10Pe) +
-        ylab(log10Po) +
-        geom_text_repel(aes(label=label), color='black',size=2.5, na.rm=T) +
-        theme_std(base_size=16)
-    p
-}
-
-p1 <- get_qqplot(result_onc) + 
-    ylim(80,100) +
-    theme(legend.position='none',axis.line.x=element_blank(),axis.ticks.x=element_blank(),axis.text.x=element_blank()) +
-    labs(x=NULL,y=NULL,subtitle='Enrichment for compound mutations among oncogenes') 
-    
-p2 <- get_qqplot(result_onc) + 
-    ylim(0,10) +
-    theme(legend.position='none')
-
-p <- plot_grid(p1,p2,rel_heights=c(1,3),align='v',ncol=1,nrow=2)
-p
-```
-
 
 \newpage
 # Rebuttal-only E
-```{r panel_e, width=5, height=8} 
-
-dat <- fread(here('data/rebuttal_only/mutation_order_bootstrapped_precalculated.txt'))
-dat_binom <- dat[,c('role','prop_first','prop_second','lwr_binom','upr_binom'),with=F]
-names(dat_binom) <- c('role','first','second','lwr','upr')
-dat_binom$method <- 'Original analysis'
-dat_boot <- dat[,c('role','prop_first','prop_second','lwr_boot','upr_boot'),with=F]
-names(dat_boot) <- c('role','first','second','lwr','upr')
-dat_boot$method <- 'Bootstrapped analysis'
-dat <- rbind(dat_binom, dat_boot)
-
-datm <- melt(dat,id.vars=c('method','role','lwr','upr'))
-datm[variable=='first',variable:='Yes']
-datm[variable=='second',variable:='No']
-datm[variable=='No',lwr:=NA]
-datm[variable=='No',upr:=NA]
-#datm[variable=='No',label:=NA]
-datm$value <- 100*datm$value; datm$lwr <- 100*datm$lwr; datm$upr <- 100*datm$upr
-setnames(datm,'variable','first')
-datm$first <- factor(datm$first, levels=c('No','Yes'))
-datm$method <- factor(datm$method, levels=c('Original analysis','Bootstrapped analysis'))
-cols <- c('#1B89AD','#B7DBEB')
-names(cols) <- c('Yes','No')
-
-p <- ggplot(datm, aes(x=role,y=value)) +
-    geom_bar(stat='identity',aes(fill=first)) +
-    #geom_text(aes(label=label),y=90) +
-    geom_errorbar(aes(min=value,max=upr),color='black',width=NA) +
-    geom_errorbar(aes(min=lwr,max=value),color='black',width=NA) +
-    geom_hline(yintercept=50,color='red',size=0.5,linetype='dashed') +
-    scale_fill_manual(values=cols, name='More prevalent allele\nmutated first:') +
-    theme_std(base_size=14) +
-    scale_y_continuous(expand=c(0,0)) +
-    labs(x=NULL,y='% timeable\ncompound mutations') + 
-    facet_wrap(facets=~method,ncol=2,nrow=1) + 
-    theme(strip.background=element_blank(),axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
-p
-
-```
-
-
-\newpage
-# Rebuttal-only F
-```{r panel_f, width=7, height=9} 
+```{r panel_e, width=7, height=9} 
 
 
 ## check whether nucleosome dyad position correlates with compound mutations
@@ -455,70 +443,341 @@ p
 
 
 \newpage
-# Rebuttal-only G
-```{r panel_g, width=6.5, height=7} 
+# Rebuttal-only F
+```{r panel_f, width=8, height=5} 
 
-d <- fread(here('data/data_mutations_phased_all.txt'))
-d <- d[exclude==F & putative_resistance_mutation.1==F & putative_resistance_mutation.2==F,]
-d_ns <- d[Variant_Classification.1!='Silent' & Variant_Classification.2!='Silent',]
-d_ns$group <- 'Nonsyn.'
-d_si <- d[Variant_Classification.1=='Silent' | Variant_Classification.2=='Silent',]
-d_si$group <- '1+ silent'
-d <- rbind(d_ns, d_si)
-d <- d[same_cell_known==T & !is.na(ccf_Mcopies.1) & !is.na(ccf_Mcopies.2),]
-d$i <- 1:nrow(d)
-d[Role %nin% c('Oncogene','TSG'),Role:='Other']
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# plot QQ plot entirely for oncogenes
+# - NB this uses results from the previous R-chunk
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-order_variant_classes <- function(d) {
-    classes <- sort(c(d$Variant_Classification.1,d$Variant_Classification.2))
-    combo <- paste(classes,collapse='+')
-    list(combo=combo)
+## oncogenes later for QQ plot
+result_onc <- test_data(d_onc)
+result_onc <- result_onc[,c('Hugo_Symbol','p.value','q.value'),with=F]
+names(result_onc) <- c('Hugo_Symbol','p_enriched','q_enriched')
+
+# generate qqplot
+get_qqplot <- function(dat) {
+    N = nrow(dat)
+    ci <- 0.95
+    df <- data.table(observed=-log10(dat$p_enriched),
+                     expected=-log10(1:N/N),
+                     p=dat$p_enriched,
+                     q=dat$q_enriched,
+                     gene=dat$Hugo_Symbol,
+                     cupper=-log10(qbeta(ci,1:N, N - 1:N + 1)),
+                     clower=-log10(qbeta(1 - ci, 1:N, N - 1:N + 1)))
+    df$Significance <- ifelse(df$q < 0.01,'q < 0.01','Not significant')
+    df$Significance <- factor(df$Significance,levels=c('q < 0.01','Not significant'))
+    df$label <- df$gene
+    df$label[df$q >= 0.01] <- NA
+
+    ## make plot
+    log10Pe = expression(paste("Expected -log"[10], plain(P)))
+    log10Po = expression(paste("Observed -log"[10], plain(P)))
+    mycols <- c('#a6a6a6','#e50000')
+    names(mycols) <- c('Not significant','q < 0.01')
+    p <- ggplot(df,aes(x=expected,y=observed)) +
+        geom_point(pch=19, size=2.5, aes(color=Significance)) +
+        geom_abline(intercept=0, slope=1, alpha=0.5) +
+        geom_line(aes(expected, cupper), linetype=2) +
+        geom_line(aes(expected, clower), linetype=2) +
+        scale_color_manual(values=mycols) +
+        xlab(log10Pe) +
+        ylab(log10Po) +
+        geom_text_repel(aes(label=label), color='black',size=2.5, na.rm=T) +
+        theme_std(base_size=16)
+    p
 }
-res <- d[,order_variant_classes(.SD),by=c('Role','phase','group','i')]
 
-format <- function(d) {
-    cis <- sum(d$phase=='cis',na.rm=T)
-    trans <- sum(d$phase=='trans',na.rm=T)
-    list(cis=cis, trans=trans)
-}
-res <- res[,format(.SD),by=c('Role','group')]
-res <- res[Role != 'Other',]
+p1 <- get_qqplot(result_onc) + 
+    ylim(80,100) +
+    theme(legend.position='none',axis.line.x=element_blank(),axis.ticks.x=element_blank(),axis.text.x=element_blank()) +
+    labs(x=NULL,y=NULL,subtitle='Enrichment for compound mutations among oncogenes') 
+    
+p2 <- get_qqplot(result_onc) + 
+    ylim(0,10) +
+    theme(legend.position='none')
 
-ci_trans <- binom::binom.confint(res$trans,(res$cis + res$trans),method='exact')
-res$prop_trans <- ci_trans$mean
-res$prop_cis <- 1-res$prop_trans
-res$lwr <- ci_trans$lower
-res$upr <- ci_trans$upper
-x <- melt(res[,c('Role','group','prop_cis','prop_trans','lwr','upr'),with=F],id.vars=c('Role','group','lwr','upr'))
-x[variable=='prop_cis',lwr:=NA]
-x[variable=='prop_cis',upr:=NA]
-x$variable <- gsub('prop_','',x$variable)
-x$variable <- factor(x$variable, levels=c('cis','trans'))
-
-## add 2-sample prop test p-values
-getp <- function(res) {
-    pval <- prop.test(res$trans,(res$cis+res$trans))$p.value
-    list(pval=pval)
-}
-info <- res[,getp(.SD),by=group]
-x <- merge(x, info, by='group', all.x=T)
-x$pval <- prettyNum(x$pval,digits=1)
-x$group <- paste0(x$group,' (P=',x$pval,')')
-
-## plot
-cols <- c('#B7DBEB','#2C92BB')
-names(cols) <- c('cis','trans')
-p <- ggplot(x, aes(x=Role,y=value)) +
-    geom_bar(stat='identity',aes(fill=variable)) +
-    scale_fill_manual(name='Phase',values=cols) +
-    geom_errorbar(aes(min=lwr,max=upr),width=NA) +
-    scale_y_continuous(expand=c(0,0)) +
-    facet_wrap(facets=~group,ncol=2) +
-    theme_std(base_size=16) +
-    labs(x=NULL,y='Proportion of compounds') +
-    theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
+p <- plot_grid(p1,p2,rel_heights=c(1,3),align='v',ncol=1,nrow=2)
 p
 ```
+
+
+\newpage
+# Rebuttal-only G
+```{r panel_g, width=8, height=5} 
+
+## load mutations
+d <- fread(here('data/data_mutations.txt'),select=c('Hugo_Symbol','hotspot_class','tm','Variant_Type'))
+d <- d[grepl('24k',hotspot_class),]
+d <- d[Variant_Type=='SNP',]
+dd <- data.table(Hugo_Symbol=d$Hugo_Symbol, tm=d$tm, hotspot=T)
+dd <- dd[!duplicated(tm),]
+
+## for all oncokb-annotated residues, get the number of PMIDs supporting the annotation
+oncokb <- fread(here('data/allAnnotatedVariants_20191102.txt'))
+oncokb <- oncokb[
+                 grepl('Fusion',`Protein Change`)==F & grepl('Amplif',`Protein Change`)==F & 
+                 grepl('Deletion',`Protein Change`)==F & grepl('Truncat',`Protein Change`)==F,]
+oncokb <- oncokb[,c('Hugo Symbol','Protein Change','Oncogenicity','PMIDs for Mutation Effect'),with=F]
+names(oncokb) <- c('Hugo_Symbol','mutation','oncogenic','pmid')
+oncokb$tm <- paste0(oncokb$Hugo_Symbol,' ',substr(oncokb$mutation,1,(nchar(oncokb$mutation)-1)))
+oncokb <- oncokb[grepl('del',mutation)==F & grepl('exp',mutation)==F & grepl('ins',mutation)==F & grepl('dup',mutation)==F,]
+oncokb$tm <- gsub('_splic','',oncokb$tm)
+oncokb <- oncokb[tm %in% d$tm,]
+
+summarize_oncokb_tm <- function(d) {
+    oncogenic <- any(d$oncogenic=='Oncogenic',na.rm=T)
+    likely_oncogenic <- any(d$oncogenic=='Likely Oncogenic',na.rm=T)
+    inconclusive <- any(d$oncogenic=='Inconclusive',na.rm=T)
+    likely_neutral <- any(d$oncogenic=='Likely Neutral',na.rm=T)
+
+    if(oncogenic) {
+        i <- which(d$oncogenic=='Oncogenic')
+        class='oncogenic'
+    } else if(likely_oncogenic) {
+        i <- which(d$oncogenic=='Likely Oncogenic')
+        class='likely oncogenic' 
+    } else if(inconclusive) {
+        i <- which(d$oncogenic=='Inconclusive')
+        class='inconclusive'
+    } else if(likely_neutral) {
+        i <- which(d$oncogenic=='Likely Neutral')
+        class='likely neutral'
+    } else {
+        class <- 'n/a'
+        i <- as.integer()
+    }
+
+    if(length(i) > 0) {
+        pmids <- paste(d$pmid[i],collapse=', ')
+        pmids <- unique(sort(as.integer(strsplit(pmids,', ')[[1]])))
+        n_pmids <- length(pmids)
+        pmids <- paste(pmids, collapse=', ')
+    } else {
+        pmids <- ''
+        n_pmids <- as.integer(0)
+    }
+
+    out <- list(pmids=pmids, n_pmids=n_pmids, class=class) 
+    out
+}
+res <- oncokb[,summarize_oncokb_tm(.SD),by=c('Hugo_Symbol','tm')]
+
+## merge the oncokb-annotated residues with the list of all unique hotspot residues
+dd <- merge(dd, res, by=c('Hugo_Symbol','tm'), all.x=T)
+setnames(dd,'tm','residue')
+dd[,hotspot:=NULL]
+dd[is.na(class),class:='Not yet annotated' ]
+dd[is.na(n_pmids),n_pmids:=0]
+#write.tsv(dd,'data/hotspot_pmids.txt')
+
+dd$n_pmids <- as.character(dd$n_pmids)
+dd[as.integer(n_pmids) >= 6,n_pmids:='6+']
+dd$class <- gsub('oncogenic','Oncogenic',dd$class)
+dd$class <- gsub('likely','Likely',dd$class)
+dd$class <- gsub('neutral','Neutral',dd$class)
+dd$class <- gsub('n/a','Not yet annotated',dd$class)
+dd$class <- gsub('inconclusive','Inconclusive',dd$class)
+dd$class <- factor(dd$class, levels=rev(c('Oncogenic','Likely Oncogenic','Inconclusive','Likely Neutral','Not yet annotated')))
+dd$n_pmids <- factor(dd$n_pmids, levels=c('0','1','2','3','4','5','6+'))
+
+summarize_class <- function(dd) {
+    tbl <- as.list(table(dd$n_pmids))
+    names(tbl) <- levels(dd$n_pmids)
+    tbl
+}
+x <- dd[,summarize_class(.SD),by=class]
+tbl <- rowSums(x[,2:ncol(x),with=F])
+tbl <- data.table(class=x$class, freq=tbl)
+x <- melt(x, id.vars='class')
+names(x) <- c('class','n_pmids','freq')
+
+cols <- c('#BFBFBF',RColorBrewer::brewer.pal(9,'Purples')[c(1,2,3,5,7,9)])
+names(cols) <- c('0','1','2','3','4','5','6+')
+
+p <- ggplot(x, aes(x=class,y=freq)) +
+    geom_bar(stat='identity',aes(fill=n_pmids),color='black',size=0.25,width=0.8) +
+    geom_text(data=tbl,aes(y=freq,label=freq),hjust=-0.2,vjust=0.5) +
+    theme_std(base_size=14) +
+    scale_y_continuous(expand=c(0,0),limits=c(0,500),breaks=seq(0,500,by=100),position='right') +
+    scale_fill_manual(values=cols,name='# PMID references') +
+    labs(x=NULL,y='Number of hotspot mutations',subtitle='Variants in compound mutations') +
+    coord_flip()
+p
+```
+
+\newpage
+# Rebuttal-only H
+```{r panel_h, width=6, height=8} 
+
+## use supp data from N. Lopez-Bigas lab to
+## check if mutation rate near active TFBSs 
+## accounts for compound mutations
+## active TFBS data: http://bg.upf.edu/group/projects/tfbs/
+## paper: https://www.nature.com/articles/nature17661#Sec2
+
+get_mutrate <- function(dd, tf) { 
+    dd$Chromosome <- paste0('chr',dd$Chromosome)
+    setkey(dd,'Chromosome','Start_Position','End_Position')
+    names(tf) <- c('Chromosome','Start_Position','End_Position','TF')
+    tf$midpoint <- round((tf$Start_Position + tf$End_Position)/2)
+    tf$window_start <- tf$midpoint - 1000
+    tf$window_end <- tf$midpoint + 1000
+    tf[,c('Start_Position','End_Position'):=NULL]
+    setkey(tf,'Chromosome','window_start','window_end')
+    dd2 <- foverlaps(dd, tf, type='any')
+    dd2$distance_from_tfbs <- dd2$Start_Position - dd2$midpoint
+    dd2 <- dd2[!is.na(TF),]
+    p <- ggplot(dd2,aes(x=distance_from_tfbs)) + 
+        scale_x_continuous(expand=c(0,0),limits=c(-1000,1000)) + 
+        scale_y_continuous(expand=c(0,0)) + 
+        geom_histogram(bins=100) + 
+        theme_std(base_size=14)
+    list(plot=p, data=dd2)
+}
+
+summarize_bin <- function(d) {
+    variants_in_compounds <- length(unique(d$tsb_gene[d$compound==T]))
+    variants_overall <- length(unique(d$tsb_gene))
+    list(variants_overall=variants_overall, variants_in_compounds=variants_in_compounds)
+}
+
+## TCGA SKCM
+d <- fread(here('data/data_mutations_tcga.txt'))
+clin <- fread(here('data/data_clinical_tcga.txt'))
+clin <- clin[DISEASE=='SKCM']
+dd <- d[Tumor_Sample_Barcode %in% clin$Tumor_Sample_Barcode,]
+tf <- fread(here('data/proximalTFBS-DHS_skcm.bed'))
+info <- get_mutrate(dd, tf)
+p1a <- info$plot + labs(x='Distance from TFBS (bp)',y='Mutation frequency',title='Mutation-rate near active TFBS (proximal to TSS)',subtitle='SKCM (TCGA), all genes')
+p1a
+```
+
+
+\newpage
+# Rebuttal-only I
+```{r panel_i, width=6, height=8} 
+
+## load signature associated mutations
+sig <- fread(here('data/data_mutations_signature_attribution.txt'))
+sig$id <- paste(sig$Tumor_Sample_Barcode,sig$Hugo_Symbol)
+tbl <- table.freq(sig$id)
+sig$compound <- sig$id %in% tbl$value[tbl$N > 1]
+sig$id <- paste(sig$Hugo_Symbol,gsub('p[.]','',sig$HGVSp_Short))
+sig[Variant_Type!='SNP',id:=NA]
+
+## subset for oncogenes
+genes <- fread(here('data/gene_info.txt'))
+oncogenes <- genes$Hugo_Symbol[genes$Role=='Oncogene']
+sig <- sig[Hugo_Symbol %in% oncogenes,]
+
+## append annotation of driver from oncokb
+oncokb <- fread(here('data/allAnnotatedVariants_20191102.txt'))
+oncokb <- oncokb[
+                 grepl('Fusion',`Protein Change`)==F & grepl('Amplif',`Protein Change`)==F &
+                 grepl('Deletion',`Protein Change`)==F & grepl('Truncat',`Protein Change`)==F &
+                 grepl('del',`Protein Change`)==F & grepl('dup',`Protein Change`)==F & grepl('ins',`Protein Change`)==F,]
+oncokb <- oncokb[,c('Hugo Symbol','Protein Change','Oncogenicity','PMIDs for Mutation Effect'),with=F]
+names(oncokb) <- c('Hugo_Symbol','mutation','oncogenic','pmid')
+oncokb$id <- paste(oncokb$Hugo_Symbol,oncokb$mutation)
+oncokb[,Hugo_Symbol:=NULL]
+oncokb[,mutation:=NULL]
+sig <- merge(sig, oncokb, by='id', all.x=T)
+sig$driver <- sig$oncogenic %in% c('Oncogenic','Likely Oncogenic')
+
+## subset data for driver mutations in oncogenes with signature attribution available
+drivers <- sig[driver==T & aetiology_class!='Decomposition failed',]
+drivers$attribution <- as.character(NA)
+drivers[aetiology_class=='No attributed signature',attribution:='None']
+drivers[aetiology_class!='No attributed signature',attribution:='Sig. attributed']
+
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# rate of drivers EVER associated with signatures
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+summarize_driver <- function(drivers) {
+    cnt_not_attrib <- sum(drivers$attribution=='None')
+    cnt_attrib <- sum(drivers$attribution!='None')
+    if(cnt_attrib > 0) { #cnt_not_attrib) {
+        class <- 'Sig. attributed'
+    } else {
+        class <- 'None'
+    }
+    list(class=class)
+}
+res <- drivers[,summarize_driver(.SD),by=c('Hugo_Symbol','oncogenic','pmid','id')]
+tbl <- table.freq(res$class)
+tbl$p <- 100*tbl$N/sum(tbl$N)
+tbl$p_label  <- paste0(round(tbl$p,1),'%')
+
+p1 <- ggplot(tbl,aes(x=1,y=p)) +
+    geom_bar(stat='identity',aes(fill=value)) +
+    geom_text(aes(label=p_label),hjust=0.5,vjust=-0.2) +
+    scale_y_continuous(limits=c(0,100),breaks=seq(0,100,by=25),expand=c(0,0)) +
+    theme_std(base_size=16) +
+    labs(x='536 OncoKB-annotated driver\nmutations in oncogenes',y='% driver mutations ever attributed to signatures',
+         subtitle='Driver mutations ever attributed to signatures\n(IMPACT, excludes samples with failed decomposition)') +
+    xlim(-2,4)
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# for mutations in compounds, check if driver status
+# related to signature attribution
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+tmp <- sig[aetiology_class!='Decomposition failed',]
+tmp$attribution <- as.character(NA)
+tmp[aetiology_class=='No attributed signature',attribution:='None']
+tmp[aetiology_class!='No attributed signature',attribution:='Sig. attributed']
+
+get_sig_attribution_rate <- function(tmp) {
+    attr <- sum(tmp$attribution=='Sig. attributed' & tmp$driver==T)
+    not_attr <- sum(tmp$attribution=='None' & tmp$driver==T)
+    data.table(attr=attr, not_attr=not_attr)
+}
+
+info <- get_sig_attribution_rate(tmp)
+info$mutations <- 'all mutations'
+info1 <- get_sig_attribution_rate(tmp[compound==T,])
+info1$mutations <- 'compound mutations'
+info2 <- get_sig_attribution_rate(tmp[compound==F,])
+info2$mutations <- 'singletons'
+result <- rbind(info1, info2)
+result$total <- result$attr + result$not_attr
+
+ci <- binom::binom.confint(result$attr, result$total, method='exact')
+ci$type <- result$mutations
+ci$mean <- 100*ci$mean
+ci$lower <- 100*ci$lower
+ci$upper <- 100*ci$upper
+pval <- prop.test(ci$x,ci$n,alternative='two.sided')$p.value
+pval <- paste0('P=',prettyNum(pval,digits=1))
+
+p2 <- ggplot(ci, aes(x=type,y=mean)) +
+    geom_bar(stat='identity',fill='black') +
+    geom_signif(comparisons=list(c('compound mutations','singletons')),annotation=pval,y_position=14) +
+    geom_errorbar(aes(min=lower,max=mean),color='white',width=NA,size=1) +
+    geom_errorbar(aes(min=mean,max=upper),color='black',width=NA,size=1) +
+    scale_y_continuous(expand=c(0,0),limits=c(0,15),breaks=seq(0,15,by=2.5)) +
+    theme_std(base_size=16) +
+    theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
+    labs(x=NULL,y='Percentage',
+         subtitle='Driver mutations attributed to mutational signatures')
+
+p <- plot_grid(p1, p2, ncol=2, rel_widths=c(2,1))
+p
+```
+
+
+
+
+
+
+
+
+
 
 
 

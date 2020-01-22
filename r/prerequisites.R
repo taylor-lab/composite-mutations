@@ -14,6 +14,7 @@ require(DESeq2)
 require(pheatmap)
 require(car)
 require(here)
+require(magrittr)
 
 important_classes <- c('Missense_Mutation','Nonsense_Mutation','Splice_Site','In_Frame_Del','In_Frame_Ins',
                        'Frame_Shift_Del','Frame_Shift_Ins','TERT promoter','Translation_Start_Site')

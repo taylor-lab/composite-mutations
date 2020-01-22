@@ -91,9 +91,6 @@ p
 
 ## note that we are correcting the number of samples overall to be the number of samples including those with 0 mutations based on the clinical data
 info_all <- readRDS(here('data/observed_vs_expected_compounds_tcga_precalculated.rds'))
-#info_all$dat_all$prop <- info_all$dat_all$x / N
-#info_all$n_compounds <- info_all$obs_all * Nmut
-#info_all$obs_all <- info_all$n_compounds / N
 obs <- info_all$obs_all
 exp <- median(info_all$dat_all$prop)
 
@@ -110,10 +107,12 @@ x <- break_axis(pd$prop,maxlower=16,minupper=22,lowerticksize=1,upperticksize=1,
 pd$prop2 <- x$newy
 expected_color <- c('black','red')
 names(expected_color) <- c('Randomly shuffled','Observed')
+obs_label <- paste0(prettyNum(obs*100,digits=3),'%')
 
 p <- ggplot(pd,aes(x=prop2)) +
     geom_histogram(binwidth=0.1,aes(fill=data),color='white',size=0.2) +    
     geom_vline(data=pd[data=='Observed',],aes(xintercept=prop2),color='red',linetype='dashed',size=1) +
+    geom_text(data=pd[min(which(data=='Observed')),],aes(x=prop2),label=obs_label, y=1000,color='red',size=5) +
     scale_fill_manual(values=expected_color,name=NULL) +
     scale_x_continuous(breaks=c(x$breaks), labels=c(x$labels), limits=c(13.0,19.1)) +
     scale_y_continuous(expand=c(0,0)) +
@@ -180,7 +179,7 @@ dm[value > 0,value:=as.numeric(value/100)]
 dm[Hugo_Symbol=='TP53' & variable=='patients',value:=-8.75]
 
 cols <- c('#EC7C65','#1E88AC')
-names(cols) <- c('patients','compound')
+names(cols) <- c('compound','patients')
 
 p1 <- ggplot(dm,aes(x=Hugo_Symbol,y=value)) +
     geom_bar(stat='identity',aes(fill=variable)) +
@@ -306,7 +305,7 @@ p
 ### 1F
 
 ```{r panel_f,width=8,height=6}
-## number of higher-order compound overall
+## gene enrichment/depletion volcano plot
 
 dat <- fread(here('data/gene_enrichment_precalculated.txt'))
 dat$nlog10q <- -log10(dat$q_twosided)
@@ -335,4 +334,209 @@ p
 ```
 
 
+\pagebreak
+### 1G
+```{r panel_g}
+
+cols <- RColorBrewer::brewer.pal(8,'Paired')
+cols <- c('black',cols,'#BFBFBF')
+names(cols) <- c('Decomposition failed','Other','Multiple, non-separable','TMZ','POLE','MMR','Smoking/Tobacco','UV','APOBEC','No attributed signature')
+
+# for combined compounds across all genes, get the
+# breakdown of associated signatures
+result <- fread(here('data/data_mutations_signature_attribution.txt'))
+result$aetiology <- factor(result$aetiology, levels=names(cols))
+
+# count number of variants per sample/gene
+count_variants <- function(result) {
+    num_variants <- nrow(result)
+    tbl <- table(result$aetiology)
+    tbl <- c(num_variants, tbl)
+    names(tbl)[1] <- 'num_variants'
+    tbl <- as.list(tbl)
+    tbl
+}
+x <- result[,count_variants(.SD),by=c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol')]
+x <- x[num_variants > 1,]
+x <- melt(x,id.vars=c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol','num_variants'))
+x <- x[variable!='Decomposition failed',]
+x <- x[value > 0,] ## these are compounds where 1+ variants in a sample/gene are attributed to the given aetiology
+tbl <- table.freq(x$variable)
+names(tbl) <- c('aetiology','N')
+
+coldata <- data.table(col=cols, aetiology=names(cols))
+tbl <- merge(tbl, coldata, by='aetiology', all.x=T)
+tbl <- tbl[aetiology!='Decomposition failed',]
+tbl$aetiology <- paste0(tbl$aetiology,' (',tbl$N,')')
+tbl$prop <- 100*(tbl$N / sum(tbl$N))
+tbl <- tbl[order(prop, decreasing=T),]
+tbl$aetiology <- factor(tbl$aetiology, levels=rev(tbl$aetiology))
+tbl$ypos <- cumsum(tbl$prop)
+tmpcols <- tbl$col
+names(tmpcols) <- tbl$aetiology
+N <- sum(tbl$N)
+
+p <- ggplot(tbl,aes(x=1,y=prop)) +
+    geom_bar(stat='identity',aes(fill=aetiology)) +
+    scale_fill_manual(values=tmpcols, name=paste0('Associated\nsignature (N=',N,')')) +
+    theme_std(base_size=16) +
+    scale_y_continuous(expand=c(0,0),limits=c(0,100),breaks=seq(0,100,by=25),position='right') +
+    theme(axis.line.y=element_blank(),axis.ticks.y=element_blank(),axis.text.y=element_blank()) +
+    xlim(-2,4) +
+    labs(x='Etiology',y='Number of mutations',subtitle='Signature attribution of mutations in compounds (IMPACT)') +
+    coord_flip()
+p <- extract_gglegend(p)
+p <- plot_grid(p$plot,p$legend,ncol=1,nrow=2, rel_heights=c(2,3))
+p
+
+```
+
+
+\pagebreak
+### 1H
+```{r panel_h,width=7,height=8}
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# show freq of variants with attributal signature per gene
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+result <- fread(here('data/data_mutations_signature_attribution.txt'))
+result <- result[aetiology_class!='Decomposition failed',]
+
+get_attributed_signatures <- function(result) {
+    num_variants <- nrow(result)
+    apobec <- sum(result$aetiology_class=='APOBEC') >= 1
+    uv <- sum(result$aetiology_class=='UV') >= 1
+    smoking <- sum(result$aetiology_class=='Smoking/Tobacco') >= 1
+    multiple <- sum(result$aetiology_class=='Multiple, non-separable') >= 1
+    mmr <- sum(result$aetiology_class=='MMR') >= 1
+    other <- sum(result$aetiology_class=='Other') >= 1
+    pol <- sum(result$aetiology_class=='POLE') >= 1
+    tmz <- sum(result$aetiology_class=='TMZ') >= 1
+    none <- !apobec & !uv & !smoking & !multiple & !mmr & !other & !pol & !tmz
+    list(num_variants=num_variants,
+         none=none,
+         apobec=apobec,
+         uv=uv,
+         smoking=smoking,
+         multiple=multiple,
+         mmr=mmr,
+         other=other,
+         pol=pol,
+         tmz=tmz)
+}
+
+## for singletons and compounds, check if any are assigned to smoking/uv/apobec
+x <- result[,get_attributed_signatures(.SD),by=c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol')]
+x <- x[num_variants > 1,]
+x <- melt(x,id.vars=c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol','num_variants'))
+x <- x[value==T,]
+x$variable <- as.character(x$variable)
+
+x[variable=='apobec',variable:='APOBEC']
+x[variable=='uv',variable:='UV']
+x[variable=='smoking',variable:='Smoking/Tobacco']
+x[variable=='mmr',variable:='MMR']
+x[variable=='pol',variable:='POLE']
+x[variable=='tmz',variable:='TMZ']
+x[variable=='other',variable:='Other']
+x[variable=='multiple',variable:='Multiple, non-separable']
+x[variable=='none',variable:='No attributed signature']
+x$variable <- factor(x$variable, levels=rev(names(cols))[1:9])
+
+## subset for recurrently compound-mutated genes
+tbl <- table.freq(x$Hugo_Symbol)
+#recurrent_genes <- tbl$value[tbl$N >= 20]
+gene_enrichment2 <- fread(here('data/gene_enrichment_precalculated.txt'))
+recurrent_genes <- gene_enrichment2$Hugo_Symbol[gene_enrichment2$q_enriched < 0.01]
+x <- x[Hugo_Symbol %in% recurrent_genes,]
+tbl <- table.freq(x$Hugo_Symbol)
+
+xm <- as.data.frame.matrix(xtabs(~Hugo_Symbol + variable,data=x))
+xm <- cbind(Hugo_Symbol=rownames(xm), adt(xm))
+cnt_associated <- rowSums(xm[,3:ncol(xm)])
+cnt_overall <- rowSums(xm[,2:ncol(xm),with=F])
+pct_associated <- data.table(Hugo_Symbol=xm$Hugo_Symbol,value=cnt_overall,prop_associated=paste0(round(100*(cnt_associated / cnt_overall),1)))
+xm <- adt(melt(xm,id.vars='Hugo_Symbol'))
+xm$variable <- factor(xm$variable, levels=rev(names(cols)))
+xm$Hugo_Symbol <- factor(xm$Hugo_Symbol, levels=rev(tbl$value))
+
+## plot gene-level rate of compounds associated with mutation signatures
+p <- ggplot(xm,aes(x=Hugo_Symbol,y=value)) +
+    geom_bar(stat='identity',aes(fill=variable),width=0.8) +
+    geom_text(data=pct_associated, aes(x=Hugo_Symbol,y=value,label=prop_associated),hjust=-0.2,vjust=0.5,size=3) +
+    scale_fill_manual(values=cols, name='Aetiology of 1+\nvariants in compound') +
+    scale_y_continuous(expand=c(0,0)) +
+    coord_flip() +
+    theme_std(base_size=12) +
+    labs(x='Genes enriched for compound mutations',y='Number of compound mutations',
+         subtitle='Compound mutations with associated with mutational signatures')
+p
+```
+
+
+\pagebreak
+### 1I
+```{r panel_i,width=6,height=11}
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# show freq of variants with attributal signature per residue
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+result <- fread(here('data/data_mutations_signature_attribution.txt'))
+result <- result[aetiology_class!='Decomposition failed',]
+
+## for singletons and compounds, check if any are assigned to smoking/uv/apobec
+residue_enrichment <- fread(here('data/residue_enrichment_precalculated.txt'))
+residue_hotspots <- residue_enrichment$query_mutation[residue_enrichment$q.value.enriched < 0.01]
+result$id <- paste(result$Hugo_Symbol, gsub('p[.]','',result$HGVSp_Short))
+result$nchar <- nchar(result$id)
+result[Hugo_Symbol!='TERT' & Variant_Type=='SNP',id:=substr(id,1,(nchar-1))]
+result[Variant_Type!='SNP',id:=NA]
+result$hotspot <- result$id %in% residue_hotspots
+result$tsb_gene <- paste(result$Tumor_Sample_Barcode,result$Hugo_Symbol)
+tbl <- table.freq(result$tsb_gene)
+result$compound <- result$tsb_gene %in% tbl$value[tbl$N > 1]
+compound_hotspots <- result[hotspot==T & compound==T,]
+
+x2 <- compound_hotspots[,get_attributed_signatures(.SD),by=c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol','id')]
+x2[,num_variants:=NULL]
+
+## annotate residues with hotspots for compounds here!
+x2 <- melt(x2,id.vars=c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol','id'))
+x2$variable <- as.character(x2$variable)
+x2[variable=='apobec',variable:='APOBEC']
+x2[variable=='uv',variable:='UV']
+x2[variable=='smoking',variable:='Smoking/Tobacco']
+x2[variable=='mmr',variable:='MMR']
+x2[variable=='pol',variable:='POLE']
+x2[variable=='tmz',variable:='TMZ']
+x2[variable=='other',variable:='Other']
+x2[variable=='multiple',variable:='Multiple, non-separable']
+x2[variable=='none',variable:='No attributed signature']
+x2$variable <- factor(x2$variable, levels=rev(names(cols))[1:9])
+x2 <- x2[value==T,]
+tbl <- table.freq(x2$id)
+tbl$Hugo_Symbol <- sapply(tbl$value,function(s) strsplit(s,' ')[[1]][1])
+tbl <- tbl[order(Hugo_Symbol,N,decreasing=F)]
+
+x2m <- as.data.frame.matrix(xtabs(~id + variable,data=x2))
+x2m <- cbind(id=rownames(x2m),adt(x2m))
+cnt_associated <- rowSums(x2m[,3:ncol(x2m),with=F])
+cnt_overall <- rowSums(x2m[,2:ncol(x2m),with=F])
+pct_associated <- data.table(id=x2m$id,value=cnt_overall,prop_associated=paste0(round(100*(cnt_associated / cnt_overall),1)))
+x2m <- adt(melt(x2m,id.vars='id'))
+#x2m$variable <- factor(x2m$variable, levels=rev(names(cols)))
+x2m$id <- factor(x2m$id, levels=rev(tbl$value))
+
+p <- ggplot(x2m,aes(x=id,y=value)) +
+    geom_bar(stat='identity',aes(fill=variable),width=0.8) +
+    geom_text(data=pct_associated, aes(x=id,y=value,label=prop_associated),hjust=-0.2,vjust=0.5,size=2) +
+    scale_fill_manual(values=cols, name='Associated etiology') +
+    scale_y_continuous(expand=c(0,0)) +
+    coord_flip() +
+    theme_std(base_size=10) +
+    labs(x=NULL,y='Number of compound mutations',subtitle='Compound mutation SNP hotspots associated with mutational signatures')
+p
+```
 

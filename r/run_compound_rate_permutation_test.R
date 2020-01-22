@@ -193,7 +193,6 @@ m$Hugo_Symbol <- as.integer(factor(m$Hugo_Symbol)) - 1
 ## run 1e5 iterations across 1000 parallelized batches of 100 
 set.seed(42)
 batches <- 1:1000
-reps_per_batch <- 100
 l <- mclapply(batches, run_for_batch, m, reps_per_batch, mc.cores=cpus)
 ll <- rbindlist(l)
 ll$prop <- ll$x / N 
@@ -212,4 +211,4 @@ obs <- sum(res$any.compound) / N
 
 ## save the results to data/
 results_all <- list(dat_all=ll,obs_all=obs)
-saveRDS(results_all,file=here('data/observed_vs_expected_compounds_tcga.rds'))
+saveRDS(results_all,file=here('data/observed_vs_expected_compounds_tcga_precalculated.rds'))
