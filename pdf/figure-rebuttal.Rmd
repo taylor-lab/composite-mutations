@@ -772,13 +772,126 @@ p
 
 
 
+\newpage
+# Rebuttal-only J
+```{r panel_j, width=8, height=5} 
+
+## load mutations
+d <- fread(here('data/data_mutations.txt'),select=c('Hugo_Symbol','hotspot_class','tm','Variant_Type'))
+d <- d[grepl('24k',hotspot_class),]
+d <- d[Variant_Type=='SNP',]
+dd <- data.table(Hugo_Symbol=d$Hugo_Symbol, tm=d$tm, hotspot=T)
+dd <- dd[!duplicated(tm),]
 
 
+## for all oncokb-annotated residues, get the number of PMIDs supporting the annotation
+oncokb <- fread(here('data/allAnnotatedVariants_20191102.txt'))
+oncokb <- oncokb[
+                 grepl('Fusion',`Protein Change`)==F & grepl('Amplif',`Protein Change`)==F & 
+                 grepl('Deletion',`Protein Change`)==F & grepl('Truncat',`Protein Change`)==F,]
+oncokb <- oncokb[,c('Hugo Symbol','Protein Change','Oncogenicity','PMIDs for Mutation Effect'),with=F]
+names(oncokb) <- c('Hugo_Symbol','mutation','oncogenic','pmid')
+oncokb$tm <- paste0(oncokb$Hugo_Symbol,' ',substr(oncokb$mutation,1,(nchar(oncokb$mutation)-1)))
+oncokb <- oncokb[grepl('del',mutation)==F & grepl('exp',mutation)==F & grepl('ins',mutation)==F & grepl('dup',mutation)==F,]
+oncokb$tm <- gsub('_splic','',oncokb$tm)
+oncokb <- oncokb[tm %in% d$tm,]
+
+summarize_oncokb_tm <- function(d) {
+    oncogenic <- any(d$oncogenic=='Oncogenic',na.rm=T)
+    likely_oncogenic <- any(d$oncogenic=='Likely Oncogenic',na.rm=T)
+    inconclusive <- any(d$oncogenic=='Inconclusive',na.rm=T)
+    likely_neutral <- any(d$oncogenic=='Likely Neutral',na.rm=T)
+
+    if(oncogenic) {
+        i <- which(d$oncogenic=='Oncogenic')
+        class='oncogenic'
+    } else if(likely_oncogenic) {
+        i <- which(d$oncogenic=='Likely Oncogenic')
+        class='likely oncogenic' 
+    } else if(inconclusive) {
+        i <- which(d$oncogenic=='Inconclusive')
+        class='inconclusive'
+    } else if(likely_neutral) {
+        i <- which(d$oncogenic=='Likely Neutral')
+        class='likely neutral'
+    } else {
+        class <- 'n/a'
+        i <- as.integer()
+    }
+
+    if(length(i) > 0) {
+        pmids <- paste(d$pmid[i],collapse=', ')
+        pmids <- unique(sort(as.integer(strsplit(pmids,', ')[[1]])))
+        n_pmids <- length(pmids)
+        pmids <- paste(pmids, collapse=', ')
+    } else {
+        pmids <- ''
+        n_pmids <- as.integer(0)
+    }
+
+    out <- list(pmids=pmids, n_pmids=n_pmids, class=class) 
+    out
+}
+oncokb_res <- oncokb[,summarize_oncokb_tm(.SD),by=c('Hugo_Symbol','tm')]
+oncokb_res$database <- 'OncoKB'
 
 
+chasm <- fread('~/lab/projects/compound_mutations/data/processed_data/ifs/reviewer_response/chasm/chasm_cravat_gorelica_20200124_154730/Variant.Result.tsv',skip=11)
+chasm <- chasm[,c('HUGO symbol','Protein sequence change','CHASM p-value','CHASM FDR','ClinVar'),with=F]
+names(chasm) <- c('Hugo_Symbol','allele','chasm_pval','chasm_fdr','clinvar')
+nc <- nchar(chasm$allele)
+chasm$tm <- paste(chasm$Hugo_Symbol,substr(chasm$allele,1,nc-1))
+
+collapse_chasm_variant <- function(chasm) {
+    variants <- nrow(chasm)
+    best_q <- min(chasm$chasm_fdr)
+    clinvar <- sortunique(chasm$clinvar[chasm$clinvar!='' & !is.na(chasm$clinvar)])
+    if(length(clinvar) > 0) { 
+        clinvar <- paste(sortunique(clinvar),collapse='; ')
+    } else {
+        clinvar <- as.character(NA)
+    }
+    list(best_q=best_q, clinvar=clinvar, n_variants=variants)
+}
+chasm2 <- chasm[,collapse_chasm_variant(.SD),by=c('Hugo_Symbol','tm')]
+chasm2[best_q < 0.1,class:='Predicted oncogenic (CHASM)']
+chasm2[best_q >= 0.1,class:='Not predicted oncogenic (CHASM)']
+chasm2$database <- 'CHASM'
+chasm2[,c('n_variants'):=NULL]
 
 
+## merge oncokb/chasm together, annotate residues with best overall evidence
+annotations <- rbind(oncokb_res, chasm2,fill=T)
+annotations[class %in% c('likely oncogenic','Predicted oncogenic (CHASM)','oncogenic'),effect:='Oncogenic/Predicted oncogenic']
+annotations[class %nin% c('likely oncogenic','Predicted oncogenic (CHASM)','oncogenic'),effect:='Likely neutral/Inconclusive']
+annotations$class <- factor(annotations$class, levels=c('oncogenic','likely oncogenic','Predicted oncogenic (CHASM)','inconclusive','likely neutral','Not predicted oncogenic (CHASM)'))
 
+collapse_residue <- function(annotations) {
+    annotations <- annotations[order(class),]
+    out <- annotations[1,]
+    out
+}
+annotations_collapsed <- annotations[,collapse_residue(.SD),by=c('Hugo_Symbol','tm')]
 
+x <- melt(xtabs(~class + effect, data=annotations_collapsed))
+x$class <- factor(x$class, levels=rev(c('oncogenic','likely oncogenic','Predicted oncogenic (CHASM)','inconclusive','likely neutral','Not predicted oncogenic (CHASM)')))
+x$effect <- factor(x$effect, levels=c('Oncogenic/Predicted oncogenic','Likely neutral/Inconclusive'))
+#sum(x$value[x$effect=='Likely neutral/Inconclusive'])
+#sum(x$value[x$effect!='Likely neutral/Inconclusive'])
+
+cols <- RColorBrewer::brewer.pal(6,'RdYlBu')
+names(cols) <- rev(levels(x$class))
+
+p <- ggplot(x, aes(x=effect,y=value)) +
+    geom_bar(stat='identity',aes(fill=class),width=0.8) +
+    scale_fill_manual(values=cols,name='Classification') + 
+    #geom_text(data=tbl,aes(y=N,label=N),hjust=-0.2,vjust=0.5) +
+    theme_std(base_size=14) +
+    scale_y_continuous(expand=c(0,0),limits=c(0,800),breaks=seq(0,800,by=200)) +
+    theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
+    labs(x=NULL,y='Number of hotspot mutations')
+p
+
+```
 
 
