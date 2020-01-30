@@ -16,7 +16,7 @@ source(here::here('r/prerequisites.R'))
 # Rebuttal-only A
 ```{r panel_a, width=6.5, height=7} 
 
-d <- fread(here('data/data_mutations_phased_all.txt'))
+d <- fread(here('data/rebuttal_only/data_mutations_phased_all.txt'))
 d <- d[exclude==F & putative_resistance_mutation.1==F & putative_resistance_mutation.2==F,]
 d_ns <- d[Variant_Classification.1!='Silent' & Variant_Classification.2!='Silent',]
 d_ns$group <- 'Nonsyn.'
@@ -33,6 +33,8 @@ order_variant_classes <- function(d) {
     list(combo=combo)
 }
 res <- d[,order_variant_classes(.SD),by=c('Role','phase','group','i')]
+res$prop_cis <- res$cis/(res$cis + res$trans)
+res$prop_trans <- res$trans/(res$cis + res$trans)
 
 format <- function(d) {
     cis <- sum(d$phase=='cis',na.rm=T)
@@ -127,7 +129,11 @@ p
 # Rebuttal-only C
 ```{r panel_c, width=5, height=6}
 
+d_clin <- fread(here('data/data_clinical.txt'))
+Nsamples <- sum(d_clin$exclude==F)
 d_si <- fread(here('data/data_mutations_silent.txt'))
+d_si <- d_si[exclude==F,]
+
 count <- function(d) {
     n <- length(unique(d$Tumor_Sample_Barcode))
     list(n=n)
@@ -141,7 +147,7 @@ gene_results <- fread(here('data/gene_enrichment_precalculated.txt'))
 gene_info <- fread(here('data/gene_info.txt'))
 gene_info <- merge(gene_info[,c('Hugo_Symbol','cds_length'),with=F], gene_results, by='Hugo_Symbol', all.x=T)
 gene_info <- merge(gene_info, x, by='Hugo_Symbol', all.x=T)
-gene_info$silent_rate <- (gene_info$silent_mutations/gene_info$cds_length) #/1e6
+gene_info$silent_rate <- 1e6*gene_info$silent_mutations/(gene_info$cds_length*Nsamples)
 gene_info <- gene_info[order(q_enriched,decreasing=F)]
 gene_info$nlog10q <- -log10(gene_info$q_enriched)
 gene_info$label <- gene_info$Hugo_Symbol
@@ -160,10 +166,10 @@ pval <- paste0('P=',prettyNum(pval,digits=1));
 library(ggsignif)
 p <- ggplot(tmp,aes(x=enrichment_for_compounds,y=silent_rate)) +
     geom_boxplot(width=0.1,outlier.shape=NA,fill='white') +
-    geom_signif(comparison=list(c('Not significant','q<0.01')), annotation=pval, y_position=0.19) +
-    scale_y_continuous(limits=c(0,0.2),breaks=seq(0,0.15,by=0.025)) +
+    geom_signif(comparison=list(c('Not significant','q<0.01')), annotation=pval, y_position=3) +
+    scale_y_continuous(limits=c(0,3.5)) + 
     theme_std(base_size=16) +
-    labs(x='Compound mutations in genes',y='Synonymous mutation rate')
+    labs(x='Compound mutations in genes',y='Synonymous mutations/Mb')
 p
 
 ```
@@ -342,7 +348,7 @@ d$start <- d$Start_Position-1000
 d$end <- d$Start_Position+1000
 d <- d[exclude==F,] 
 
-dyads <- fread(here('data/dyads_genic.bed'))
+dyads <- fread(here('data/rebuttal_only/dyads_genic.bed'))
 names(dyads) <- c('Chromosome','start','end')
 dyads$Chromosome <- gsub('chr','',dyads$Chromosome)
 setkey(dyads,'Chromosome','start','end')
@@ -606,53 +612,51 @@ p <- ggplot(x, aes(x=class,y=freq)) +
     labs(x=NULL,y='Number of hotspot mutations',subtitle='Variants in compound mutations') +
     coord_flip()
 p
-```
 
-\newpage
-# Rebuttal-only H
-```{r panel_h, width=6, height=8} 
 
-## use supp data from N. Lopez-Bigas lab to
-## check if mutation rate near active TFBSs 
-## accounts for compound mutations
-## active TFBS data: http://bg.upf.edu/group/projects/tfbs/
-## paper: https://www.nature.com/articles/nature17661#Sec2
 
-get_mutrate <- function(dd, tf) { 
-    dd$Chromosome <- paste0('chr',dd$Chromosome)
-    setkey(dd,'Chromosome','Start_Position','End_Position')
-    names(tf) <- c('Chromosome','Start_Position','End_Position','TF')
-    tf$midpoint <- round((tf$Start_Position + tf$End_Position)/2)
-    tf$window_start <- tf$midpoint - 1000
-    tf$window_end <- tf$midpoint + 1000
-    tf[,c('Start_Position','End_Position'):=NULL]
-    setkey(tf,'Chromosome','window_start','window_end')
-    dd2 <- foverlaps(dd, tf, type='any')
-    dd2$distance_from_tfbs <- dd2$Start_Position - dd2$midpoint
-    dd2 <- dd2[!is.na(TF),]
-    p <- ggplot(dd2,aes(x=distance_from_tfbs)) + 
-        scale_x_continuous(expand=c(0,0),limits=c(-1000,1000)) + 
-        scale_y_continuous(expand=c(0,0)) + 
-        geom_histogram(bins=100) + 
-        theme_std(base_size=14)
-    list(plot=p, data=dd2)
-}
+### use supp data from N. Lopez-Bigas lab to
+### check if mutation rate near active TFBSs 
+### accounts for compound mutations
+### active TFBS data: http://bg.upf.edu/group/projects/tfbs/
+### paper: https://www.nature.com/articles/nature17661#Sec2
+#
+#get_mutrate <- function(dd, tf) { 
+#    dd$Chromosome <- paste0('chr',dd$Chromosome)
+#    setkey(dd,'Chromosome','Start_Position','End_Position')
+#    names(tf) <- c('Chromosome','Start_Position','End_Position','TF')
+#    tf$midpoint <- round((tf$Start_Position + tf$End_Position)/2)
+#    tf$window_start <- tf$midpoint - 1000
+#    tf$window_end <- tf$midpoint + 1000
+#    tf[,c('Start_Position','End_Position'):=NULL]
+#    setkey(tf,'Chromosome','window_start','window_end')
+#    dd2 <- foverlaps(dd, tf, type='any')
+#    dd2$distance_from_tfbs <- dd2$Start_Position - dd2$midpoint
+#    dd2 <- dd2[!is.na(TF),]
+#    p <- ggplot(dd2,aes(x=distance_from_tfbs)) + 
+#        scale_x_continuous(expand=c(0,0),limits=c(-1000,1000)) + 
+#        scale_y_continuous(expand=c(0,0)) + 
+#        geom_histogram(bins=100) + 
+#        theme_std(base_size=14)
+#    list(plot=p, data=dd2)
+#}
+#
+#summarize_bin <- function(d) {
+#    variants_in_compounds <- length(unique(d$tsb_gene[d$compound==T]))
+#    variants_overall <- length(unique(d$tsb_gene))
+#    list(variants_overall=variants_overall, variants_in_compounds=variants_in_compounds)
+#}
+#
+### TCGA SKCM
+#d <- fread(here('data/data_mutations_tcga.txt'))
+#clin <- fread(here('data/data_clinical_tcga.txt'))
+#clin <- clin[DISEASE=='SKCM']
+#dd <- d[Tumor_Sample_Barcode %in% clin$Tumor_Sample_Barcode,]
+#tf <- fread(here('data/proximalTFBS-DHS_skcm.bed'))
+#info <- get_mutrate(dd, tf)
+#p1a <- info$plot + labs(x='Distance from TFBS (bp)',y='Mutation frequency',title='Mutation-rate near active TFBS (proximal to TSS)',subtitle='SKCM (TCGA), all genes')
+#p1a
 
-summarize_bin <- function(d) {
-    variants_in_compounds <- length(unique(d$tsb_gene[d$compound==T]))
-    variants_overall <- length(unique(d$tsb_gene))
-    list(variants_overall=variants_overall, variants_in_compounds=variants_in_compounds)
-}
-
-## TCGA SKCM
-d <- fread(here('data/data_mutations_tcga.txt'))
-clin <- fread(here('data/data_clinical_tcga.txt'))
-clin <- clin[DISEASE=='SKCM']
-dd <- d[Tumor_Sample_Barcode %in% clin$Tumor_Sample_Barcode,]
-tf <- fread(here('data/proximalTFBS-DHS_skcm.bed'))
-info <- get_mutrate(dd, tf)
-p1a <- info$plot + labs(x='Distance from TFBS (bp)',y='Mutation frequency',title='Mutation-rate near active TFBS (proximal to TSS)',subtitle='SKCM (TCGA), all genes')
-p1a
 ```
 
 
@@ -836,6 +840,12 @@ oncokb_res <- oncokb[,summarize_oncokb_tm(.SD),by=c('Hugo_Symbol','tm')]
 oncokb_res$database <- 'OncoKB'
 
 
+tmp <- merge(dd, oncokb_res, by='tm', all.x=T)
+tmp[is.na(class),class:='Not yet annotated']
+table.freq(tmp$class)
+table(tmp$class=='Not yet annotated')
+
+
 chasm <- fread('~/lab/projects/compound_mutations/data/processed_data/ifs/reviewer_response/chasm/chasm_cravat_gorelica_20200124_154730/Variant.Result.tsv',skip=11)
 chasm <- chasm[,c('HUGO symbol','Protein sequence change','CHASM p-value','CHASM FDR','ClinVar'),with=F]
 names(chasm) <- c('Hugo_Symbol','allele','chasm_pval','chasm_fdr','clinvar')
@@ -895,3 +905,175 @@ p
 ```
 
 
+\newpage
+# Rebuttal-only K
+```{r panel_k, width=8, height=5} 
+
+
+d <- fread(here('data/data_mutations_tcga.txt')) 
+clin <- fread(here('data/data_clinical_tcga.txt'))
+samples <- clin$Tumor_Sample_Barcode[clin$DISEASE=='SKCM']
+d <- d[Tumor_Sample_Barcode %in% samples,]
+
+## annotate mutations with if they are part of a compound
+d$tsbgene <- paste(d$Tumor_Sample_Barcode,d$Hugo_Symbol)
+tbl <- table.freq(d$tsbgene)
+d <- merge(d, tbl, by.x='tsbgene', by.y='value', all.x=T)
+
+## subset for SNPs, then merge with dyads centered within 1000bp of the SNP
+d$start <- d$Start_Position-1000
+d$end <- d$Start_Position+1000
+
+
+## get mutation rate around active TFBSs
+tabulate <- function(d, tfbs) {
+    d <- d[Variant_Type=='SNP']
+    setkey(d,'Chromosome','start','end')
+
+    dd <- foverlaps(d, tfbs, type='any')
+    dd_notfbs <- dd[is.na(tfbs_start),] ## mutations not within 1000bp of any tfbs
+    dd$distance_to_tfbs <- dd$Start_Position-dd$tfbs_start
+    dd[is.na(tfbs_start),distance_to_tfbs:=-9999]
+
+    ## tabulate number of SNPs at any distance to tfbs
+    x <- table.freq(dd$distance_to_tfbs)
+    x$distance <- as.integer(x$value)
+    x[,value:=NULL]
+    x
+}
+
+active_tfbs_coding <- fread(here('data/rebuttal_only/tfbs_skcm_dhs_coding.txt'))
+active_tfbs_coding <- active_tfbs_coding[,c('chr','tfbs_start','tfbs_end','tfbs_id'),with=F]
+setkey(active_tfbs_coding,'chr','tfbs_start','tfbs_end')
+
+dat <- tabulate(d, active_tfbs_coding)
+dat$prop <- dat$N / sum(dat$N)
+dat <- dat[order(distance),]
+dat <- dat[distance >= -1e3 & distance <= 1e3]
+
+## fit a smooth spline to the data
+spl <- smooth.spline(x=dat$distance,y=dat$prop,spar=1)
+pred <- predict(spl)
+dat$pred <- pred$y
+
+max_amp <- max(dat$pred)
+dat$diff_from_halfmax <- abs(dat$pred - max_amp/2)
+lwr <- which(dat$diff_from_halfmax==min(dat$diff_from_halfmax[dat$distance < 0]))
+upr <- which(dat$diff_from_halfmax==min(dat$diff_from_halfmax[dat$distance > 0]))
+FWHM <- dat$distance[c(lwr,upr)]
+dm <- melt(dat[,c('distance','prop','pred'),with=F], id.vars='distance')
+dm[variable=='prop',variable:='Observed']
+dm[variable=='pred',variable:='Fit']
+
+cols <- c('#BFBFBF','steelblue')
+names(cols) <- c('Observed','Fit')
+
+p0 <- ggplot(dm,aes(x=distance,y=value)) +
+    geom_point(aes(color=variable)) +
+    scale_color_manual(values=cols,name=NULL) + 
+    geom_vline(xintercept=FWHM,color='black',linetype=2,size=0.5) +
+    xlim(c(-1000,1000)) + ylim(c(0,0.0001)) +
+    theme_std(base_size=12) + 
+    theme(legend.position='none') +
+    labs(x='Distance from active-TFBS [bp]',y='Proportion of SNPs',title='')
+
+## compare the fraction of singletons and compounds to fall within the FWHM range
+d_compound <- d[N > 1,]
+d_singleton <- d[N == 1,]
+ddc <- tabulate(d_compound, active_tfbs_coding)
+ddc$class <- 'SNPs in compounds'
+ddc$prop <- ddc$N / sum(ddc$N)
+dds <- tabulate(d_singleton, active_tfbs_coding)
+dds$class <- 'SNPs in singletons'
+dds$prop <- dds$N / sum(dds$N)
+dd <- rbind(ddc,dds)
+dd <- dd[order(distance,class)]
+dd$within_fwhm <- dd$distance >= FWHM[1] & dd$distance <= FWHM[2]
+
+x_c <- sum(dd$N[dd$within_fwhm==T & dd$class=='SNPs in compounds'])
+y_c <- sum(dd$N[dd$within_fwhm==F & dd$class=='SNPs in compounds'])
+N_c <- sum(dd$N[dd$class=='SNPs in compounds'])
+x_s <- sum(dd$N[dd$within_fwhm==T & dd$class=='SNPs in singletons'])
+y_s <- sum(dd$N[dd$within_fwhm==F & dd$class=='SNPs in singletons'])
+N_s <- sum(dd$N[dd$class=='SNPs in singletons'])
+
+ci <- binom::binom.confint(c(x_s,x_c),c(N_s,N_c),method='exact')
+ci$type <- c('Singleton','Compound')
+ci$mean <- 100*ci$mean
+ci$lower <- 100*ci$lower
+ci$upper <- 100*ci$upper
+
+m <- as.matrix(rbind(c(y_s,x_s),c(y_c,x_c)))
+pval <- prop.test(m)$p.value
+plabel <- paste0('P=',prettyNum(pval,digits=1))
+
+p1 <- ggplot(ci,aes(x=type,y=mean)) +
+    geom_bar(stat='identity',fill='black') +
+    geom_signif(comparison=list(c('Compound','Singleton')),annotation=plabel,y_position=2) +
+    scale_y_continuous(expand=c(0,0),limits=c(0,2.2)) + 
+    geom_errorbar(aes(min=lower,max=mean,width=NA),size=1,color='white') +
+    geom_errorbar(aes(min=mean,max=upper,width=NA),size=1,color='black') +
+    theme_std(base_size=12) +
+    theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
+    labs(x=NULL,y='Prop of SNPs in highlighted region')
+
+p <- plot_grid(p0, p1, ncol=2, rel_widths=c(3,1))
+p
+
+```
+
+
+\newpage
+# Rebuttal-only L
+```{r panel_l, width=6, height=7} 
+
+## load processed mutation data including hotspot annotations
+d <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','Hugo_Symbol','HGVSp_Short','tm','exclude',
+                                                    'putative_resistance_mutation','hotspot_class','hotspotid','Variant_Type'))
+length(sortunique(d$hotspotid[d$hotspot_class %in% c('24k','24k+3d') & d$Variant_Type %in% 'SNP']))
+
+d <- d[exclude==F & putative_resistance_mutation==F,]
+d$tsb_gene <- paste(d$Tumor_Sample_Barcode, d$Hugo_Symbol)
+tbl <- table.freq(d$tsb_gene)
+d <- merge(d, tbl, by.x='tsb_gene', by.y='value', all.x=T)
+d$compound <- d$N > 1
+
+# get list of original SNP hotspots
+original_hotspots <- sortunique(d$hotspotid[d$hotspot_class %in% c('24k','24k+3d') & d$Variant_Type %in% 'SNP'])
+
+## get list of SNP hotspots by Hess et al.
+## - subset Hess data for impact genes and get list of hotspot residues
+s <- fread(here('data/rebuttal_only/hess_table_s1.txt'))
+s <- s[q_LNP < 0.1,]
+
+gene_info <- fread(here('data/gene_info.txt'))
+s <- s[gene %in% gene_info$Hugo_Symbol]
+s$residue <- as.integer(substr(s$protein_change,2,(nchar(s$protein_change)-1)))
+s$ref <- strtrim(s$protein_change,1)
+s <- s[!is.na(residue)] ## remove splice sites missing residue info
+s$tm <- paste0(s$gene,' ',s$ref,s$residue)
+new_hotspots <- sortunique(s$tm)
+
+## get number of affected pts, number of compound pts, for both Chang and Hess hotspots
+hess_affected <- length(sortunique(strtrim(d$Tumor_Sample_Barcode[d$tm %in% new_hotspots],9)))
+hess_compound <- length(sortunique(strtrim(d$Tumor_Sample_Barcode[d$tm %in% new_hotspots & d$compound==T],9)))
+chang_affected <- length(sortunique(strtrim(d$Tumor_Sample_Barcode[d$tm %in% original_hotspots],9)))
+chang_compound <- length(sortunique(strtrim(d$Tumor_Sample_Barcode[d$tm %in% original_hotspots & d$compound==T],9)))
+
+## compare the propotion of compound:affected in each group
+ci <- adt(binom::binom.confint(c(chang_compound,hess_compound), c(chang_affected, hess_affected), method='exact'))
+ci$hotspots <- c('Chang et al. 2017','Hess et al. 2019')
+pval <- prop.test(c(chang_compound,hess_compound), c(chang_affected, hess_affected))$p.value
+pval <- paste0('P=',prettyNum(pval, digits=1))
+ci[,4:6] <- 100*ci[,4:6,with=F]
+
+p <- ggplot(ci, aes(x=hotspots, y=mean)) +
+    scale_y_continuous(expand=c(0,0),limits=c(0,12.5),breaks=seq(0,10,by=2.5)) +
+    geom_bar(stat='identity',fill='#2C92BB') +
+    geom_errorbar(aes(min=lower,max=upper),width=NA,size=1) +
+    geom_signif(comparison=list(ci$hotspots),annotation=pval,y_position=11.5) +
+    theme_std(base_size=16) +
+    labs(x='Hotspot list',y='% of hotspot mutations in compound')
+p
+
+```
