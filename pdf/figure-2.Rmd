@@ -268,6 +268,10 @@ names(cols) <- levels(pdat$Class)
 pval <- wilcox.test(pdat$value[pdat$Class=='Singleton'],pdat$value[pdat$Class=='Composite'])$p.value
 pval_lab <- paste0('P=',prettyNum(pval,digits=1))
 
+max_prop_sing <- tail(pdat$value[pdat$Class=='Singleton'],1)
+max_prop_comp <- tail(pdat$value[pdat$Class=='Composite'],1)
+
+
 ## plot
 p1 <- ggplot(pdat,aes(x=x.order)) +
     geom_line(aes(x=x.order,y=value,color=Class),size=1) +
@@ -312,6 +316,9 @@ ci$upper <- 100*ci$upper
 pval <- prop.test(x,n,alternative='two.sided')$p.value
 pval <- paste0('P=',prettyNum(pval,digits=1))
 
+#values <- paste0('prop=',prettyNum(ci$mean,digits=3), paste0(', 95%CI: [',prettyNum(ci$lower,digits=3),'-',prettyNum(ci$upper,digits=3),']'))
+#paste(c('Composites:','Singletons:'),values)
+
 ## to force the inset plot range within 25-40 we are will offset the data here by 25
 ## then adjust the labels in plot accordingly
 ci[,mean:=mean-25]
@@ -329,7 +336,7 @@ p2 <- ggplot(ci,aes(x=mutation, y=mean)) +
     theme_std(base_size=14) +
     theme(legend.position='none',axis.text.x=element_text(angle=0,hjust=0.5,vjust=0),plot.margin = margin(0.2, 3.5, 0.2, 3.5, "cm")) + 
     coord_flip() + 
-    labs(x=NULL,y='% hotspots',title='Fig 1c')
+    labs(x=NULL,y='% hotspots',title='Fig 2c')
 
 ## show the combined plot
 p <- plot_grid(p2, p1, rel_heights=c(1,4), ncol=1, nrow=2)

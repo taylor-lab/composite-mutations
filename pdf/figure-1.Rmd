@@ -224,47 +224,89 @@ tbl <- table.freq(d$id)
 tbl$composite <- tbl$N > 1
 tbl[,N:=NULL]
 d <- merge(d, tbl, by.x='id', by.y='value', all.x=T)
+clin <- fread(here('data/data_clinical.txt.gz'))
+clin <- clin[exclude==F,]
+N_patients <- length(unique(clin$PATIENT_ID))
 
-## QC: is fig1d.ai different from what this makes?
-d <- d[!duplicated(id),]
-d <- as.data.frame.matrix(xtabs(~Role + composite, data=d))
-names(d) <- c('singleton','composite')
-d <- cbind(role=rownames(d), adt(d))
-d$prop <- d$composite / (d$singleton + d$composite)
+tabulate_composites <- function(d) {
+    comp_onc <- any(d$composite==T & d$Role=='Oncogene')
+    comp_tsg <- any(d$composite==T & d$Role=='TSG')
+    list(comp_onc=comp_onc, comp_tsg=comp_tsg)
+}
+info <- d[,tabulate_composites(.SD),by=Tumor_Sample_Barcode]
+n_comp_onc <- length(unique(strtrim(info$Tumor_Sample_Barcode[info$comp_onc==T],9)))
+n_comp_tsg <- length(unique(strtrim(info$Tumor_Sample_Barcode[info$comp_tsg==T],9)))
+n_sing_onc <- N_patients - n_comp_onc
+n_sing_tsg <- N_patients - n_comp_tsg
 
-## prep for plot
-n_composite_onc <- d[role=='Oncogene','composite',with=F][[1]]
-n_singleton_onc <- d[role=='Oncogene','singleton',with=F][[1]]
-n_mutant_onc <- n_composite_onc + n_singleton_onc
-ci_onc <- binom.confint(n_composite_onc, n_mutant_onc, methods='exact')
-n_composite_tsg <- d[role=='TSG','composite',with=F][[1]]
-n_singleton_tsg <- d[role=='TSG','singleton',with=F][[1]]
-n_mutant_tsg <- n_composite_tsg + n_singleton_tsg
-ci_tsg <- binom.confint(n_composite_tsg, n_mutant_tsg, methods='exact')
+ci_onc <- binom.confint(n_comp_onc, N_patients, methods='exact')
+ci_tsg <- binom.confint(n_comp_tsg, N_patients, methods='exact')
+
+## p-value based on mc.nemar's test (paired samples with 2 binary features)
+m <- rbind(c(n_sing_onc,n_comp_onc),c(n_sing_tsg,n_comp_tsg))
+p <- mcnemar.test(m)$p.value
+pval_lab <- paste0('P~',prettyNum(p,digits=1))
+
+## plot
 ci_onc$Role <- 'Oncogenes'
 ci_tsg$Role <- 'TSGs'
 ci <- adt(rbind(ci_onc, ci_tsg))
 ci$label <- paste0(ci$x,'/',ci$n)
 ci[,c('mean','lower','upper'):=list(100*mean,100*lower,100*upper)]
-ci$Role <- factor(ci$Role, levels=c('TSGs','Oncogenes'))
 
-## p-value based on two-sample z test for diff in proportions
-tst <- prop.test(c(n_composite_onc,n_composite_tsg),c(n_mutant_onc,n_mutant_tsg))
-pval <- tst$p.value
-pval_label <- paste0('p=',prettyNum(pval,digits=1))
-
-## plot
 p <- ggplot(ci,aes(x=Role,y=mean)) +
     geom_bar(stat='identity',fill='black') +
     geom_errorbar(aes(min=lower,max=mean),color='white',size=0.5,width=0) +
     geom_errorbar(aes(min=mean,max=upper),color='black',size=0.5,width=0) +
-    geom_signif(comparisons=list(c("Oncogenes", "TSGs")), y_position = 7.4, tip_length = 0.06, annotations=pval_label) + 
-    scale_y_continuous(expand=c(0,0),limits=c(0,8),breaks=seq(0,8,by=2),position='right') +
+    geom_signif(comparisons=list(c("Oncogenes", "TSGs")), y_position = 17, tip_length = 0.06, annotations=pval_lab) + 
+    scale_y_continuous(expand=c(0,0),limits=c(0,20),breaks=seq(0,20,by=2),position='right') +
     theme_std(base_size=14) +
     #theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
     coord_flip() + 
-    labs(x=NULL,y='% of all mutations that\nwere composite',title='Fig 1d')
+    labs(x=NULL,y='% of cases with\ncomposite mutation',title='Fig 1d')
 p
+
+
+### QC: is fig1d.ai different from what this makes?
+#d <- d[!duplicated(id),]
+#d <- as.data.frame.matrix(xtabs(~Role + composite, data=d))
+#names(d) <- c('singleton','composite')
+#d <- cbind(role=rownames(d), adt(d))
+#d$prop <- d$composite / (d$singleton + d$composite)
+#
+### prep for plot
+#n_composite_onc <- d[role=='Oncogene','composite',with=F][[1]]
+#n_singleton_onc <- d[role=='Oncogene','singleton',with=F][[1]]
+#n_mutant_onc <- n_composite_onc + n_singleton_onc
+#ci_onc <- binom.confint(n_composite_onc, n_mutant_onc, methods='exact')
+#n_composite_tsg <- d[role=='TSG','composite',with=F][[1]]
+#n_singleton_tsg <- d[role=='TSG','singleton',with=F][[1]]
+#n_mutant_tsg <- n_composite_tsg + n_singleton_tsg
+#ci_tsg <- binom.confint(n_composite_tsg, n_mutant_tsg, methods='exact')
+#ci_onc$Role <- 'Oncogenes'
+#ci_tsg$Role <- 'TSGs'
+#ci <- adt(rbind(ci_onc, ci_tsg))
+#ci$label <- paste0(ci$x,'/',ci$n)
+#ci[,c('mean','lower','upper'):=list(100*mean,100*lower,100*upper)]
+#ci$Role <- factor(ci$Role, levels=c('TSGs','Oncogenes'))
+#
+### p-value based on two-sample z test for diff in proportions
+#tst <- prop.test(c(n_composite_onc,n_composite_tsg),c(n_mutant_onc,n_mutant_tsg))
+#pval <- tst$p.value
+#pval_label <- paste0('p=',prettyNum(pval,digits=1))
+#
+### plot
+#p <- ggplot(ci,aes(x=Role,y=mean)) +
+#    geom_bar(stat='identity',fill='black') +
+#    geom_errorbar(aes(min=lower,max=mean),color='white',size=0.5,width=0) +
+#    geom_errorbar(aes(min=mean,max=upper),color='black',size=0.5,width=0) +
+#    geom_signif(comparisons=list(c("Oncogenes", "TSGs")), y_position = 7.4, tip_length = 0.06, annotations=pval_label) + 
+#    scale_y_continuous(expand=c(0,0),limits=c(0,8),breaks=seq(0,8,by=2),position='right') +
+#    theme_std(base_size=14) +
+#    #theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
+#    coord_flip() + 
+#    labs(x=NULL,y='% of all mutations that\nwere composite',title='Fig 1d')
+#p
 
 
 #n_samples_onc <- length(unique(strtrim(d_onc$Tumor_Sample_Barcode,9)))
