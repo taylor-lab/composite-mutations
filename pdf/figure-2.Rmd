@@ -1,20 +1,21 @@
 ---
 output: pdf_document
 chunk_output_type: console
+header-includes:
+- \pagenumbering{gobble}
 ---
 
 
 ```{r setup, include = FALSE, echo = FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, autodep = knitr::dep_prev())
 source(here::here('r/prerequisites.R'))
-d_clinical <- fread(here('data/data_clinical.txt'))
 
 ## load starting datasets
-d_mutations <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','PATIENT_ID','exclude','Hugo_Symbol','Role','putative_resistance_mutation',
+d_mutations <- fread(here('data/data_mutations.txt.gz'),select=c('Tumor_Sample_Barcode','PATIENT_ID','exclude','Hugo_Symbol','Role','putative_resistance_mutation',
                                                               'Variant_Classification','Variant_Type','tcn', 'mutationid', 'high_tmb','hotspot_class',
                                                               'tm','hotspotid','HGVSp_Short','truncating','Reference_Allele','Tumor_Seq_Allele2',
                                                               'Start_Position','End_Position'))
-d_phased <- fread(here('data/data_mutations_phased.txt'))
+d_phased <- fread(here('data/data_mutations_phased.txt.gz'))
 
 ## exclude duplicates from phasing data
 d_phased$id <- paste(d_phased$mutationid.1,d_phased$mutationid.2,sep=' + ')
@@ -22,11 +23,10 @@ d_phased <- d_phased[!duplicated(id),]
 
 ```
 
-### 2A
-```{r panel_a, fig.width=8,fig.height=10}
+```{r panel_2a, fig.width=8,fig.height=10}
 
-## heatmap showing prevalence by tumortype of genes enriched for compounds 
-## add barplot above showing the observed/expected % of cases with compounds per lineage
+## heatmap showing prevalence by tumortype of genes enriched for composites 
+## add barplot above showing the observed/expected % of cases with composites per lineage
 
 ## get genes to plot
 genes <- fread(here('data/gene_enrichment_precalculated.txt'))
@@ -40,8 +40,8 @@ ctypes <- ctypes[order(obs,decreasing=F),]
 included_types <- ctypes$tumortype[ctypes$N >= 100]
 ctypes <- ctypes[tumortype %in% included_types,]
 
-## get compound rate per gene per maintype
-d <- fread(here('data/data_mutations.txt'), 
+## get composite rate per gene per maintype
+d <- fread(here('data/data_mutations.txt.gz'), 
 	select=c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol','exclude','putative_resistance_mutation'))
 d <- d[putative_resistance_mutation==F & exclude==F , c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol'),with=F]
 d <- d[Hugo_Symbol %in% genes_included & metamaintype %in% ctypes$tumortype,]
@@ -49,14 +49,14 @@ d <- d[Hugo_Symbol %in% genes_included & metamaintype %in% ctypes$tumortype,]
 count_patients <- function(d) {
     tbl <- table.freq(d$Tumor_Sample_Barcode)
     samples <- tbl$value
-    compound_samples <- tbl$value[tbl$N > 1]
+    composite_samples <- tbl$value[tbl$N > 1]
     ns <- length(unique(strtrim(samples,9)))
-    nc <- length(unique(strtrim(compound_samples,9)))
-    list(n_patients=ns, n_compound=nc)
+    nc <- length(unique(strtrim(composite_samples,9)))
+    list(n_patients=ns, n_composite=nc)
 }
 
 info <- d[,count_patients(.SD),by=c('Hugo_Symbol','metamaintype')]
-info$prop <- info$n_compound / info$n_patients
+info$prop <- info$n_composite / info$n_patients
 info$Hugo_Symbol <- factor(info$Hugo_Symbol, levels=rev(sortunique(genes_included)))
 info$metamaintype <- factor(info$metamaintype, levels=ctypes$tumortype)
 
@@ -65,10 +65,10 @@ m_prop_melt <- melt(m_prop)
 m_prop_melt$variable <- gsub('prop[.]','',m_prop_melt$variable)
 setnames(m_prop_melt,'value','prop')
 
-m_n <- reshape(info[,c('metamaintype','Hugo_Symbol','n_compound'),with=F],timevar='metamaintype',idvar='Hugo_Symbol',direction='wide')
+m_n <- reshape(info[,c('metamaintype','Hugo_Symbol','n_composite'),with=F],timevar='metamaintype',idvar='Hugo_Symbol',direction='wide')
 m_n_melt <- melt(m_n)
 m_n_melt[value==0,value:=NA]
-m_n_melt$variable <- gsub('n_compound[.]','',m_n_melt$variable)
+m_n_melt$variable <- gsub('n_composite[.]','',m_n_melt$variable)
 setnames(m_n_melt,'value','n')
 
 pd <- merge(m_n_melt,m_prop_melt,by=c('Hugo_Symbol','variable'),all=T)
@@ -82,7 +82,8 @@ p_heatmap <- ggplot(pd, aes(x=metamaintype,y=Hugo_Symbol)) +
     geom_point(pch=21,color='black',aes(fill=prop,size=n)) +
     scale_fill_gradient(low='white',high='steelblue') +
     theme_bw(base_size=14) +
-    theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
+    theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
+    labs(x=NULL,y=NULL)
 p_heatmap <- extract_gglegend(p_heatmap)
 
 ## prep data for side-by-side obs:exp barplots
@@ -121,7 +122,7 @@ p_hist <- ggplot(pd3, aes(x=tt,y=mu,group=type)) +
     theme_std(base_size=14) +
     scale_y_continuous(expand=c(0,0),breaks=seq(0,60,by=20),limits=c(0,60)) +
     theme(axis.text.x=element_blank(),axis.ticks.x=element_blank()) +
-    labs(x=NULL,y='% of cases')
+    labs(x=NULL,y='% of cases',title='Fig 2a')
 p_hist <- extract_gglegend(p_hist)
 
 p <- plot_grid(p_hist$plot, p_heatmap$plot, align='v', ncol=1, nrow=2,rel_heights=c(1,6))    
@@ -132,8 +133,7 @@ p
 ```
 
 
-### 2B
-```{r panel_b, fig.width=7,fig.height=6}
+```{r panel_2b, fig.width=7,fig.height=6}
 
 ## load phased data (using the pairwise-combos)
 d <- fread(here('data/gene_enrichment_precalculated.txt'))
@@ -165,7 +165,7 @@ get_qqplot <- function(dat) {
     role_cols <- c('#EE7C65','#1B89AD','#58595B','#A6A5A4'); names(role_cols) <- levels(df$Role)
     df$label <- df$gene
     df$label[df$q >= 0.01] <- NA
-    df[p >= 1e-10 & label %nin% c('CDKN2A','FGFR3','FOXA1','NTRK3','ERBB4','PDGFRA'),label:=NA]
+    df[p >= 1e-10 & label %nin% c('CDKN2A','FGFR3','FOXA1','ERBB4','PDGFRA'),label:=NA]
 
     ## make plot
     log10Pe = expression(paste("Expected -log"[10], plain(P)))
@@ -188,7 +188,7 @@ get_qqplot <- function(dat) {
 p1 <- get_qqplot(d) +
     theme(legend.position='none',axis.line.x=element_blank(),axis.ticks.x=element_blank(),axis.text.x=element_blank()) +
     scale_y_continuous(limits=c(40,150),breaks=seq(50,150,by=50)) + 
-    labs(x=NULL,y=NULL,title='Enrichment for compound mutations') 
+    labs(x=NULL,y=NULL,title='Fig 2b') 
     
 p2 <- get_qqplot(d[q_enriched > 0,]) + 
     ylim(0,30) +
@@ -200,8 +200,6 @@ p
 ```
 
 \pagebreak
-### 2C
-
 ```{r panel_c, fig.width=6, fig.height=6}
 
 ## load MAF, subset for hotspot SNPs among valid samples
@@ -215,21 +213,21 @@ dd[hotspot_class=='3d',hotspot_class:='']
 dd$id <- paste(dd$Tumor_Sample_Barcode,dd$Hugo_Symbol)
 tbl <- table.freq(dd$id)
 singleton <- tbl$value[tbl$N==1]
-compound <- tbl$value[tbl$N>1]
-dd$compound <- dd$id %in% compound
+composite <- tbl$value[tbl$N>1]
+dd$composite <- dd$id %in% composite
 
-## get total number of singletons and compound mutations
+## get total number of singletons and composite mutations
 dd$pid_gene <- paste(dd$PATIENT_ID,dd$Hugo_Symbol)
-total_number_singleton_mutations <- length(unique(dd$pid_gene[dd$compound==F]))
-total_number_compound_mutations <- length(unique(dd$pid_gene[dd$compound==T]))
+total_number_singleton_mutations <- length(unique(dd$pid_gene[dd$composite==F]))
+total_number_composite_mutations <- length(unique(dd$pid_gene[dd$composite==T]))
 total_number_mutations <- length(unique(dd$pid_gene))
 
 ## for each hotspot, count the numnber of mutant, singleton and multiplet samples
 summarize_individual_hotspot <- function(query.hotspot,d) {
     ## count affected singleton/multiplet samples
     mutant_samples <- sortunique(d$Tumor_Sample_Barcode[d$tm %in% query.hotspot])
-    singleton_samples <- sortunique(d$Tumor_Sample_Barcode[d$tm %in% query.hotspot & d$compound==F])
-    multiplet_samples <- sortunique(d$Tumor_Sample_Barcode[d$tm %in% query.hotspot & d$compound==T])
+    singleton_samples <- sortunique(d$Tumor_Sample_Barcode[d$tm %in% query.hotspot & d$composite==F])
+    multiplet_samples <- sortunique(d$Tumor_Sample_Barcode[d$tm %in% query.hotspot & d$composite==T])
 
     ## don't overcount patients with 2+ samples
     mutant_samples <- unique(strtrim(mutant_samples,9))
@@ -243,7 +241,7 @@ summarize_individual_hotspot <- function(query.hotspot,d) {
 }
 hotspots <- sortunique(dd$hotspotid)
 hotspots <- hotspots[hotspots!='']
-message('Counting singleton/compound samples at each hotspot (will take some time) ...')
+message('Counting singleton/composite samples at each hotspot (will take some time) ...')
 l <- lapply(hotspots, summarize_individual_hotspot, dd)
 message('Done!')
 ll <- rbindlist(l)
@@ -252,7 +250,7 @@ ll$x.order <- 1:nrow(ll)
 
 ## get total number of singleton and multiplet mutations (this includes among non-hotspots)
 ll$p.singletons <- cumsum(ll$n.singletons / total_number_singleton_mutations)
-ll$p.multiplets <- cumsum(ll$n.multiplets / total_number_compound_mutations)
+ll$p.multiplets <- cumsum(ll$n.multiplets / total_number_composite_mutations)
 ll$p.mutant <- cumsum(ll$n.mutant / total_number_mutations)
 
 ## prep data for plot
@@ -260,15 +258,20 @@ toadd <- data.table(hotspot='none',n.mutant=NA,n.singletons=NA,n.multiplets=NA,x
 pdat <- rbind(toadd,ll)
 pdat <- melt(pdat[,c('hotspot','x.order','p.singletons','p.multiplets'),with=F],id.var=c('x.order','hotspot'))
 pdat$Class <- ''
-pdat[variable=='p.singletons',Class:='% of all singletons']
-pdat[variable=='p.multiplets',Class:='% of all compound mutations']
-pdat$Class <- factor(pdat$Class,levels=c('% of all singletons','% of all compound mutations'))
-cols <- colors$compound
+pdat[variable=='p.singletons',Class:='Singleton']
+pdat[variable=='p.multiplets',Class:='Composite']
+pdat$Class <- factor(pdat$Class,levels=c('Singleton','Composite'))
+
+cols <- c('#979797','#1B89AD')
 names(cols) <- levels(pdat$Class)
+
+pval <- wilcox.test(pdat$value[pdat$Class=='Singleton'],pdat$value[pdat$Class=='Composite'])$p.value
+pval_lab <- paste0('P=',prettyNum(pval,digits=1))
 
 ## plot
 p1 <- ggplot(pdat,aes(x=x.order)) +
     geom_line(aes(x=x.order,y=value,color=Class),size=1) +
+    geom_text(label=pval_lab,data=pdat[1,],aes(x=80,y=0.275)) + 
     labs(x='Hotspot residues (decreasing mutation frequency)',y='% of all mutations') + 
     scale_y_continuous(expand=c(0,0),labels=scales::percent,limits=c(0,0.8)) +
     scale_color_manual(values=cols,name=NULL) +
@@ -288,44 +291,45 @@ dd[hotspot_class=='3d',hotspot_class:='']
 dd$id <- paste(dd$Tumor_Sample_Barcode,dd$Hugo_Symbol)
 tbl <- table.freq(dd$id)
 singleton <- tbl$value[tbl$N==1]
-compound <- tbl$value[tbl$N>1]
-dd$compound <- dd$id %in% compound
+composite <- tbl$value[tbl$N>1]
+dd$composite <- dd$id %in% composite
 
-## get number of singletons and compounds, and same for those with hotspots
-compounds <- dd[compound==T,]
-singletons <- dd[compound==F,]
-tbl_compound <- table(compounds$hotspotid!='')
+## get number of singletons and composites, and same for those with hotspots
+composites <- dd[composite==T,]
+singletons <- dd[composite==F,]
+tbl_composite <- table(composites$hotspotid!='')
 tbl_singleton <- table(singletons$hotspotid!='')
-x <- c(tbl_compound[['TRUE']], tbl_singleton[['TRUE']])
-n <- c(nrow(compounds),nrow(singletons))
+x <- c(tbl_composite[['TRUE']], tbl_singleton[['TRUE']])
+n <- c(nrow(composites),nrow(singletons))
 
 ## prep data for plot
 ci <- adt(binom.confint(x,n,method='exact'))
-ci$mutation <- c('compound','singleton')
-ci$mutation <- factor(ci$mutation, levels=rev(c('singleton','compound')))
+ci$mutation <- c('Composite','Singleton')
+ci$mutation <- factor(ci$mutation, levels=rev(c('Singleton','Composite')))
 ci$mean <- 100*ci$mean
 ci$lower <- 100*ci$lower
 ci$upper <- 100*ci$upper
 pval <- prop.test(x,n,alternative='two.sided')$p.value
-pval <- paste0('p=',prettyNum(pval,digits=1))
+pval <- paste0('P=',prettyNum(pval,digits=1))
 
-## offset data by 25 to force plot range from 25-40
-## (adjust the labels in plot accordingly)
+## to force the inset plot range within 25-40 we are will offset the data here by 25
+## then adjust the labels in plot accordingly
 ci[,mean:=mean-25]
 ci[,lower:=lower-25]
 ci[,upper:=upper-25]
 
 ## plot
 p2 <- ggplot(ci,aes(x=mutation, y=mean)) +
-    geom_bar(stat='identity',fill='black') +
-    geom_signif(comparison=list(c('compound','singleton')),annotation=pval,y_position=(37.5-26)) + 
+    geom_bar(stat='identity',aes(fill=mutation)) + 
+    scale_fill_manual(values=cols,name=NULL) + 
+    geom_signif(comparison=list(c('composite','singleton')),annotation=pval,y_position=(37.5-26)) + 
     geom_errorbar(aes(min=lower,max=mean),color='white',width=0) +
     geom_errorbar(aes(min=mean,max=upper),color='black',width=0) +
     scale_y_continuous(expand=c(0,0),breaks=seq(0,15,by=5), labels=seq(25,40,by=5), limits=c(0,15), position='right') +
     theme_std(base_size=14) +
-    theme(axis.text.x=element_text(angle=0,hjust=0.5,vjust=0),plot.margin = margin(0.2, 3.5, 0.2, 3.5, "cm")) + 
+    theme(legend.position='none',axis.text.x=element_text(angle=0,hjust=0.5,vjust=0),plot.margin = margin(0.2, 3.5, 0.2, 3.5, "cm")) + 
     coord_flip() + 
-    labs(x=NULL,y='% hotspots')
+    labs(x=NULL,y='% hotspots',title='Fig 1c')
 
 ## show the combined plot
 p <- plot_grid(p2, p1, rel_heights=c(1,4), ncol=1, nrow=2)
@@ -334,9 +338,7 @@ p
 ```
 
 \pagebreak
-### 2D
-
-```{r, panel_d, fig.width=5, fig.height=6}
+```{r, panel_d, fig.width=6.5, fig.height=2.5}
 
 get_ordered_variants <- function(d_phased, d_mutations) {
     d_phased <- d_phased[putative_resistance_mutation.1==F & putative_resistance_mutation.2==F & exclude==F,]
@@ -411,7 +413,7 @@ get_ordered_variants <- function(d_phased, d_mutations) {
 
 ## plot rate of 1st more prevalent vs 2nd more prevalent
 dat <- get_ordered_variants(d_phased, d_mutations)
-dat <- dat[same_cell_known==T | phase=='cis',] ## only consider compounds definitely in same cell
+dat <- dat[same_cell_known==T | phase=='cis',] ## only consider composites definitely in same cell
 dat$n_functional <- dat$functional.1 + dat$functional.2
 dat <- dat[n_functional == 2,]
 dat <- dat[more_common_allele!='no difference',]
@@ -450,7 +452,7 @@ m$first <- factor(m$first, levels=c('No','Yes'))
 ci$first <- factor(ci$first, levels=c('No','Yes'))
 m <- m[order(role,first),]
 ci <- ci[order(role,first),]
-cols <- rev(colors$barplot2col)
+cols <- c('#B7DBEA','#1B89AD')
 names(cols) <- levels(m$first)
 plabs <- paste0('P=',prettyNum(c(onc_p,tsg_p),digits=1))
 m$label <- as.character(NA)
@@ -458,15 +460,16 @@ m[first=='Yes',label:=plabs]
 
 p <- ggplot(m, aes(x=role,y=mean)) +
     geom_bar(stat='identity',aes(fill=first)) + 
-    geom_text(aes(label=label),y=90) + 
+    geom_text(aes(label=label),y=20) + 
     geom_errorbar(data=ci, aes(min=`mean`,max=upper),color='black',width=0) +
     geom_errorbar(data=ci, aes(min=lower,max=`mean`),color='white',width=0) +
     geom_hline(yintercept=50,color='red',size=0.5,linetype='dashed') +
-    scale_fill_manual(values=cols, name='More prevalent allele\nmutated first:') +
+    scale_fill_manual(values=cols, name='More prevalent\nallele mutated\nfirst:') +
     theme_std(base_size=14) +
-    scale_y_continuous(expand=c(0,0)) + 
-    labs(x=NULL,y='% timeable\ncompound mutations', subtitle='More prevalent allele\nmutated first') +
-    theme(strip.background=element_blank())
+    scale_y_continuous(expand=c(0,0),position='right') + 
+    labs(x=NULL,y='% timeable composite mutations', title='Fig 2d') + 
+    theme(strip.background=element_blank()) +
+    coord_flip()
 p
 
 ```

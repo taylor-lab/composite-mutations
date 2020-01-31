@@ -1,15 +1,18 @@
 ---
 output: pdf_document
 chunk_output_type: console
+header-includes:
+- \pagenumbering{gobble}
 ---
 
 ```{r setup, include = FALSE, echo = FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, autodep = knitr::dep_prev())
 source(here::here('r/prerequisites.R'))
-```{r panel_b}
+
+```{r panel_edf_unk1}
 
 ## load data from permutations
-perm <- readRDS(here::here('data/observed_vs_expected_compounds_impact_precalculated.rds'))
+perm <- readRDS(here::here('data/observed_vs_expected_composites_impact_precalculated.rds'))
 obs <- perm$obs_all
 exp <- median(perm$dat_all$prop)
 
@@ -33,7 +36,7 @@ p <- ggplot(pd,aes(x=prop2)) +
     scale_fill_manual(values=expected_color,name=NULL) +
     scale_x_continuous(breaks=c(x$breaks,18), labels=c(x$labels,24), limits=c(13.8,18.1)) +
     scale_y_continuous(expand=c(0,0)) +
-    labs(x='Percentage',y='100,000 Random shuffles',title=NULL) +
+    labs(x='Percentage',y='100,000 Random shuffles',title='EDF-unk') +
     theme_std(base_size=14) +
     theme(legend.position='none')
 p
@@ -41,12 +44,10 @@ p
 ```
 
 \pagebreak
-### 1C
+```{r panel_1b}
 
-```{r panel_c}
-
-## extract/merge the shuffled compound rate
-l <- readRDS(here::here('data/observed_vs_expected_compounds_per_tmb_impact_precalculated.rds'))
+## extract/merge the shuffled composite rate
+l <- readRDS(here::here('data/observed_vs_expected_composites_per_tmb_impact_precalculated.rds'))
 burdens <- 1:50
 extract_shuffled_data <- function(burden, l) {
     out <- data.table(mu=l[[burden]]$mu, lwr=l[[burden]]$lwr, upr=l[[burden]]$upr, 
@@ -58,22 +59,13 @@ dat <- rbindlist(ldat)
 dat$nlog10p <- -log10(dat$p)
 dat$nlog10p[dat$nlog10p>5] <- 5
 
-## use results from the improved permutation test
-#dat <- fread(here::here('data/tmb_enrichment_permutation_test.txt'))
-#setnames(dat,'p.value','p')
-#setnames(dat,'tmb','burden')
-#dat$nlog10p <- -log10(dat$p)
-#dat$nlog10p[dat$nlog10p>4] <- 4
-
-
-
 ## plot
 p.pvals <- ggplot(dat,aes(x=burden,y=nlog10p)) +
     geom_hline(yintercept=2,color='red',linetype='dashed',size=0.4) +
     geom_bar(stat='identity',width=0.9,fill='black') +
     scale_x_continuous(breaks=seq(0,40,by=5),limits=c(0,40.5),expand=c(0,0)) +
     scale_y_continuous(expand=c(0,0)) +
-    labs(x=NULL,y='-log10(p)') +
+    labs(x=NULL,y='-log10(p)',title='Fig 1b') +
     theme_std(base_size=14) +
     theme(axis.text.x=element_blank(),axis.ticks.x=element_blank(),axis.line.x=element_blank())
 
@@ -88,12 +80,10 @@ plot_grid(p.pvals,p.hist,align='v',rel_heights=c(1,1),ncol=1,nrow=2)
 ```
 
 \pagebreak
-### 1D
-
-```{r panel_d, height=10,width=8}
+```{r panel_1c, fig.height=10, fig.width=8}
 
 ## generate data used for pie chart:
-sample_info <- fread(here('data/data_clinical.txt'))
+sample_info <- fread(here('data/data_clinical.txt.gz'))
 
 ## categorize all samples in clinical data (including those with 0 mutations in MAF)
 ## according to cause of hypermutation or non-hypermutated
@@ -117,53 +107,51 @@ tmp <- rbind(tmp1,tmp2,tmp3,tmp4,tmp5,tmp6)
 tmp$group <- factor(tmp$group,levels=unique(tmp$group))
 tmp <- tmp[order(sample,group),]
 tmp <- tmp[!duplicated(sample),]
-N <- nrow(tmp) # 31,461; 34,650 including samples with 0 mutations
-N_patients <- length(sortunique(strtrim(sample_info$Tumor_Sample_Barcode,9))) # 28,689; 31,359 with 0-mut samples
+N <- nrow(tmp) 
+N_patients <- length(sortunique(strtrim(sample_info$Tumor_Sample_Barcode,9)))
 
 
-## for each sample/gene combo, check for compound; resistance mutation; possible biallelic loss
+## for each sample/gene combo, check for composite; resistance mutation; possible biallelic loss
 summarize_sample_gene <- function(d) {
-    compound <- nrow(d) > 1
-    any_resistance <- any(d$putative_resistance_mutation,na.rm=T) & compound==T
-    if(d$Role[1] %in% c('TSG','Oncogene/TSG') & sum(d$Variant_Classification %in% c('Nonsense_Mutation','Splice_Site','Frame_Shift_Del','Frame_Shift_Ins')) > 1) {
-        prob_biallelic_loss_of_tsg <- T  
-    } else {
-        prob_biallelic_loss_of_tsg <- F
-    }
-
-    list(compound=compound,any_resistance=any_resistance,prob_biallelic_loss_of_tsg=prob_biallelic_loss_of_tsg)
+    composite <- nrow(d) > 1
+    any_resistance <- any(d$putative_resistance_mutation,na.rm=T) & composite==T
+    #if(d$Role[1] %in% c('TSG','Oncogene/TSG') & sum(d$Variant_Classification %in% c('Nonsense_Mutation','Splice_Site','Frame_Shift_Del','Frame_Shift_Ins')) > 1) {
+    #    prob_biallelic_loss_of_tsg <- T  
+    #} else {
+    #    prob_biallelic_loss_of_tsg <- F
+    #}
+    #
+    list(composite=composite,any_resistance=any_resistance) #,prob_biallelic_loss_of_tsg=prob_biallelic_loss_of_tsg)
 } 
-d <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','Hugo_Symbol','Variant_Classification','Role','putative_resistance_mutation'))
+d <- fread(here('data/data_mutations.txt.gz'),select=c('Tumor_Sample_Barcode','Hugo_Symbol','Variant_Classification','Role','putative_resistance_mutation'))
 info <- d[,summarize_sample_gene(.SD),by=c('Tumor_Sample_Barcode','Hugo_Symbol')]
 info2 <- merge(info, tmp, by.x='Tumor_Sample_Barcode', by.y='sample', all=T)
-info2[is.na(compound),compound:=F]
+info2[is.na(composite),composite:=F]
 info2[is.na(any_resistance),any_resistance:=F]
-info2[is.na(prob_biallelic_loss_of_tsg),prob_biallelic_loss_of_tsg:=F]
+#info2[is.na(prob_biallelic_loss_of_tsg),prob_biallelic_loss_of_tsg:=F]
 
 
-## for each sample, check for any compounds and then assign putative source
+## for each sample, check for any composites and then assign putative source
 summarize_sample <- function(d) {
-    any.compound <- any(d$compound)
+    any.composite <- any(d$composite)
     any.resistance <- any(d$any_resistance)
-    if(any.compound==F) {
+    if(any.composite==F) {
         reason <- 'n/a'
     } else {
-        reason <- 'Unexplained compound mutation'
+        reason <- 'Unexplained composite mutation'
         if(d$group[1]!='Normal-TMB') {
             reason <- as.character(d$group[1])
         } else if(any.resistance) {
             reason <- 'Known resistance mutation'
-        } else if(any(d$prob_biallelic_loss_of_tsg==T)) {
-            reason <- 'Probably biallelic-loss of TSG'
         }
     }
-    list(any.compound=any.compound, reason=reason)
+    list(any.composite=any.composite, reason=reason)
 }
 sample_result <- info2[,summarize_sample(.SD),by=Tumor_Sample_Barcode]
 
 
 ## make pie chart:
-reason_levels <- c('n/a','Unexplained compound mutation','Probably biallelic-loss of TSG','Known resistance mutation','MSI-High',
+reason_levels <- c('n/a','Unexplained composite mutation','Known resistance mutation','MSI-High',
                    'MMR-signature','TMZ-signature','POLE-signature','Non-hypermutant, High-TMB')
 sample_result$reason <- factor(sample_result$reason,levels=reason_levels)
 
@@ -182,105 +170,144 @@ piechart_theme <- theme_minimal()+
       axis.line.y = element_blank()
 )
 
-## pie chart 1: any compounds/sample
-tbl1 <- adt(prop.table(table(sample_result$any.compound)))
-tbl1$`Compound mutations` <- '0'
-tbl1$`Compound mutations`[tbl1$V1==T] <- '1+'
+## pie chart 1: % samples with any composite mutations
+tbl1 <- adt(prop.table(table(sample_result$any.composite)))
+tbl1$`Composite mutations` <- 'No'
+tbl1$`Composite mutations`[tbl1$V1==T] <- 'Yes'
 tbl1[,V1:=NULL]
 names(tbl1)[1] <- 'prop'
-tbl1$`Compound mutations` <- paste0(tbl1$`Compound mutations`, ' (',100*round(tbl1$prop,3),'%)')
-mycols1 <- colors$compound
-names(mycols1) <- tbl1$`Compound mutations`
-samples_overall <- paste0('N=',N)
-compound_samples_overall <- paste0('N=',sum(sample_result$any.compound))
+tbl1$`Composite mutations` <- paste0(tbl1$`Composite mutations`, ' (',100*round(tbl1$prop,3),'%)')
 
-pie  <- ggplot(tbl1, aes(x="", y=prop, fill=`Compound mutations`))+
+mycols1 <- c('black','#666667')
+names(mycols1) <- tbl1$`Composite mutations`
+samples_overall <- paste0('N=',N)
+composite_samples_overall <- paste0('N=',sum(sample_result$any.composite))
+
+pie <- ggplot(tbl1, aes(x="", y=prop, fill=`Composite mutations`))+
     geom_bar(width = 1, stat = "identity") + 
     coord_polar("y", start=0) +
     piechart_theme +
-    scale_fill_manual(values=mycols1,name=paste0('Compound mutations per sample\n(',samples_overall,')')) +
-    ggtitle('Proportion of patients with any compound mutations')
+    scale_fill_manual(values=mycols1,name=paste0('Sample has composite mutations\n(',samples_overall,')')) +
+    ggtitle('Fig 1c')
 
 
-## pie chart 2: possible explanation for compounds
-tbl2 <- adt(prop.table(table(sample_result$reason[sample_result$any.compound==T])))
+## pie chart 2: possible explanation for composites
+tbl2 <- adt(prop.table(table(sample_result$reason[sample_result$any.composite==T])))
 tbl2 <- tbl2[V1!='n/a',]
 names(tbl2) <- c('reason','prop')
+tbl2[reason=='Unexplained composite mutation',reason:='Unclear']
+tbl2[reason=='Non-hypermutant, High-TMB',reason:='High TMB']
+tbl2[reason=='Known resistance mutation',reason:='Rx resistance']
+tbl2$reason <- gsub('-signature','',tbl2$reason)
 tbl2$reason <- paste0(tbl2$reason, ' (',100*round(tbl2$prop,3),'%)')
 tbl2$reason <- factor(tbl2$reason,levels=rev(tbl2$reason))
-mycols2 <- brewer.pal(8,'Paired')
+mycols2 <- c(brewer.pal(6,'Paired'),'#BEBDBE')
 names(mycols2) <- levels(tbl2$reason)
 
 pie2 <- ggplot(tbl2, aes(x="", y=prop, fill=reason),color='black')+
     geom_bar(width = 1, stat = "identity") + 
     coord_polar("y", start=0) +
     piechart_theme +
-    scale_fill_manual(values=mycols2,name=paste0('Putative explanation\n(',compound_samples_overall,')')) +
-    ggtitle('Putative explanation')
-
+    scale_fill_manual(values=mycols2,name=paste0('Origin\n(',composite_samples_overall,')'))
 
 plot_grid(pie,pie2,ncol=1,nrow=2)
 ```
 
 \pagebreak
-### 1E
-
-```{r panel_e}
+```{r panel_1d,fig.width=5,fig.height=2.25}
 
 ## load mutation data
-d <- fread(here('data/data_mutations.txt'),select=c('exclude','putative_resistance_mutation','Tumor_Sample_Barcode','Hugo_Symbol','Role'))
+d <- fread(here('data/data_mutations.txt.gz'),select=c('exclude','putative_resistance_mutation','Tumor_Sample_Barcode','Hugo_Symbol','Role'))
 d <- d[exclude==F & putative_resistance_mutation==F,]
 d$id <- paste(d$Tumor_Sample_Barcode,d$Hugo_Symbol)
 tbl <- table.freq(d$id)
-tbl$compound <- tbl$N > 1
+tbl$composite <- tbl$N > 1
 tbl[,N:=NULL]
 d <- merge(d, tbl, by.x='id', by.y='value', all.x=T)
 
-## tabulate fraction of oncogene-mutant samples with a compound mutation
-d_onc <- d[Role=='Oncogene',]
-n_samples_onc <- length(unique(strtrim(d_onc$Tumor_Sample_Barcode,9)))
-n_compound_onc <- length(unique(strtrim(d_onc$Tumor_Sample_Barcode[d_onc$compound==T],9)))
-ci_onc <- binom.confint(n_compound_onc, n_samples_onc, methods='exact')
+## QC: is fig1d.ai different from what this makes?
+d <- d[!duplicated(id),]
+d <- as.data.frame.matrix(xtabs(~Role + composite, data=d))
+names(d) <- c('singleton','composite')
+d <- cbind(role=rownames(d), adt(d))
+d$prop <- d$composite / (d$singleton + d$composite)
 
-## tabulate fraction of tsgogene-mutant samples with a compound mutation
-d_tsg <- d[Role=='TSG',]
-n_samples_tsg <- length(unique(strtrim(d_tsg$Tumor_Sample_Barcode,9)))
-n_compound_tsg <- length(unique(strtrim(d_tsg$Tumor_Sample_Barcode[d_tsg$compound==T],9)))
-ci_tsg <- binom.confint(n_compound_tsg, n_samples_tsg, methods='exact')
-
-## p-value based on two-sample z test for diff in proportions
-tst <- prop.test(c(n_compound_onc,n_compound_tsg),c(n_samples_onc,n_samples_tsg))
-pval <- tst$p.value
-pval_label <- paste0('p=',prettyNum(pval,digits=1))
-
-## plot
+## prep for plot
+n_composite_onc <- d[role=='Oncogene','composite',with=F][[1]]
+n_singleton_onc <- d[role=='Oncogene','singleton',with=F][[1]]
+n_mutant_onc <- n_composite_onc + n_singleton_onc
+ci_onc <- binom.confint(n_composite_onc, n_mutant_onc, methods='exact')
+n_composite_tsg <- d[role=='TSG','composite',with=F][[1]]
+n_singleton_tsg <- d[role=='TSG','singleton',with=F][[1]]
+n_mutant_tsg <- n_composite_tsg + n_singleton_tsg
+ci_tsg <- binom.confint(n_composite_tsg, n_mutant_tsg, methods='exact')
 ci_onc$Role <- 'Oncogenes'
 ci_tsg$Role <- 'TSGs'
 ci <- adt(rbind(ci_onc, ci_tsg))
 ci$label <- paste0(ci$x,'/',ci$n)
 ci[,c('mean','lower','upper'):=list(100*mean,100*lower,100*upper)]
+ci$Role <- factor(ci$Role, levels=c('TSGs','Oncogenes'))
 
+## p-value based on two-sample z test for diff in proportions
+tst <- prop.test(c(n_composite_onc,n_composite_tsg),c(n_mutant_onc,n_mutant_tsg))
+pval <- tst$p.value
+pval_label <- paste0('p=',prettyNum(pval,digits=1))
+
+## plot
 p <- ggplot(ci,aes(x=Role,y=mean)) +
     geom_bar(stat='identity',fill='black') +
     geom_errorbar(aes(min=lower,max=mean),color='white',size=0.5,width=0) +
     geom_errorbar(aes(min=mean,max=upper),color='black',size=0.5,width=0) +
-    geom_signif(comparisons=list(c("Oncogenes", "TSGs")), y_position = 20, size=0.2, tip_length = 0.06, annotations=pval_label) + 
-    scale_y_continuous(expand=c(0,0),limits=c(0,22)) +
+    geom_signif(comparisons=list(c("Oncogenes", "TSGs")), y_position = 7.4, tip_length = 0.06, annotations=pval_label) + 
+    scale_y_continuous(expand=c(0,0),limits=c(0,8),breaks=seq(0,8,by=2),position='right') +
     theme_std(base_size=14) +
-    theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
-    labs(x=NULL,y='% of cases with compound mutations',title=NULL)
+    #theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
+    coord_flip() + 
+    labs(x=NULL,y='% of all mutations that\nwere composite',title='Fig 1d')
 p
+
+
+#n_samples_onc <- length(unique(strtrim(d_onc$Tumor_Sample_Barcode,9)))
+#n_composite_onc <- length(unique(strtrim(d_onc$Tumor_Sample_Barcode[d_onc$composite==T],9)))
+#ci_onc <- binom.confint(n_composite_onc, n_samples_onc, methods='exact')
+#
+### tabulate fraction of tsgogene-mutant samples with a composite mutation
+#d_tsg <- d[Role=='TSG',]
+#n_samples_tsg <- length(unique(strtrim(d_tsg$Tumor_Sample_Barcode,9)))
+#n_composite_tsg <- length(unique(strtrim(d_tsg$Tumor_Sample_Barcode[d_tsg$composite==T],9)))
+#ci_tsg <- binom.confint(n_composite_tsg, n_samples_tsg, methods='exact')
+#
+### p-value based on two-sample z test for diff in proportions
+#tst <- prop.test(c(n_composite_onc,n_composite_tsg),c(n_samples_onc,n_samples_tsg))
+#pval <- tst$p.value
+#pval_label <- paste0('p=',prettyNum(pval,digits=1))
+#
+### plot
+#ci_onc$Role <- 'Oncogenes'
+#ci_tsg$Role <- 'TSGs'
+#ci <- adt(rbind(ci_onc, ci_tsg))
+#ci$label <- paste0(ci$x,'/',ci$n)
+#ci[,c('mean','lower','upper'):=list(100*mean,100*lower,100*upper)]
+#
+#p <- ggplot(ci,aes(x=Role,y=mean)) +
+#    geom_bar(stat='identity',fill='black') +
+#    geom_errorbar(aes(min=lower,max=mean),color='white',size=0.5,width=0) +
+#    geom_errorbar(aes(min=mean,max=upper),color='black',size=0.5,width=0) +
+#    geom_signif(comparisons=list(c("Oncogenes", "TSGs")), y_position = 20, size=0.2, tip_length = 0.06, annotations=pval_label) + 
+#    scale_y_continuous(expand=c(0,0),limits=c(0,22)) +
+#    theme_std(base_size=14) +
+#    theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
+#    labs(x=NULL,y='% of cases with composite mutations',title=NULL)
+#p
 
 ```
 
 
 \pagebreak
-### 1F
-
-```{r panel_f}
+```{r panel_1e,fig.width=5,fig.height=2.25}
 
 ## load phased data with pairwise-mutation comparison
-d <- fread(here('data/data_mutations_phased.txt'),select=c('Tumor_Sample_Barcode','exclude','putative_resistance_mutation.1','putative_resistance_mutation.2',
+d <- fread(here('data/data_mutations_phased.txt.gz'),select=c('Tumor_Sample_Barcode','exclude','putative_resistance_mutation.1','putative_resistance_mutation.2',
                 'truncating.1','truncating.2','Role','Hugo_Symbol'))
 d <- d[exclude==F & putative_resistance_mutation.1==F & putative_resistance_mutation.2==F,]
 d$Class <- ''
@@ -289,16 +316,17 @@ d[(truncating.1==T & truncating.2==F | truncating.1==F & truncating.2==T),Class:
 d[truncating.1==T & truncating.2==T,Class:='Truncating/Truncating']
 d <- d[Role %in% c('Oncogene','TSG'),]
 
-## don't overcount 3+ mutation compound-mutations; using unique sample/gene/Class counts
+## don't overcount 3+ mutation composite-mutations; using unique sample/gene/Class counts
 d$id <- paste(d$Tumor_Sample_Barcode, d$Hugo_Symbol, d$Class)
 d <- d[!duplicated(id),c('Tumor_Sample_Barcode','Hugo_Symbol','Class','Role','id'),with=F]
 dd <- d
 dd[Class!='Non-truncating/Non-truncating',Class:='1 or both are truncating']
 dd$Class <- factor(dd$Class,levels=(c('Non-truncating/Non-truncating','1 or both are truncating')))
-cols <- colors$barplot2col
+
+cols <- c('#2D92BA','#B7DAEA')
 names(cols) <- rev(levels(dd$Class))
 
-## for each gene, get its singleton/compound counts
+## for each gene, get its singleton/composite counts
 summarize_gene <- function(d) {
     n_missense_missense <- length(unique(strtrim(d$Tumor_Sample_Barcode[d$Class=='Non-truncating/Non-truncating'],9)))
     n_any_truncating <- length(unique(strtrim(d$Tumor_Sample_Barcode[d$Class=='1 or both are truncating'],9)))
@@ -308,7 +336,7 @@ summarize_gene <- function(d) {
 res <- dd[,summarize_gene(.SD),by=c('Role')]
 role_order <- c('Oncogene','TSG')
 pval <- fisher.test(res[,(2:3),with=F])$p.value
-pval_label <- paste0('p=',pval)
+pval_label <- paste0('P=',pval)
 
 res$Role <- factor(res$Role, levels=role_order)
 res <- res[order(Role),]
@@ -326,17 +354,19 @@ setnames(ci,'mean','value')
 ci$value <- 100*ci$value
 ci$lower <- 100*ci$lower
 ci$upper <- 100*ci$upper
+ci$Role <- factor(ci$Role, levels=c('TSG','Oncogene'))
 
 p <- ggplot(dat2, aes(x=Role,y=value)) +
     geom_bar(stat='identity',aes(fill=variable)) +
-    geom_signif(comparisons=list(c("Oncogene", "TSG")), y_position =102, size=0.2, tip_length = 0, annotations=pval_label) + 
+    geom_signif(comparisons=list(c("Oncogene", "TSG")), y_position =105, tip_length = 0, annotations=pval_label) + 
     scale_fill_manual(values=cols,name='Consequence') +
     geom_errorbar(data=ci,aes(min=lower,max=value),color='white',width=0) +
     geom_errorbar(data=ci,aes(min=value,max=upper),color='black',width=0) +
-    scale_y_continuous(expand=c(0,0),limits=c(0,106)) +
-    labs(x='Role in cancer',y='Percentage',title=NULL) +
+    scale_y_continuous(expand=c(0,0),limits=c(0,115),breaks=seq(0,100,by=25),position='right') +
+    labs(x=NULL,y='% of composite mutants',title='Fig 1e') +
     theme_std(base_size=14) +
-    theme(legend.position='right',axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
+    theme(legend.position='bottom') + #axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
+    coord_flip()
 p
 ```
 
