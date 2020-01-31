@@ -1,14 +1,16 @@
 *.swp
 *.Rproj*
 *.Rhistory
+*.pdf
+
+## development directories
+do
+new
+pdf/figs
+data/rebuttal_only
+data/toremove
+
 .DS_Store
 .Rproj.user
-do/*.html
-do/*.pdf
-pdf/*.pdf
 
-# these data files are too large to keep in this repo,
-# pull them from google drive instead
-data/data_mutations.txt
-data/data_mutations_tcga.txt
-data/data_mutations_phased.txt
+
