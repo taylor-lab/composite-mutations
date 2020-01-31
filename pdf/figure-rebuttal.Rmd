@@ -972,7 +972,7 @@ p0 <- ggplot(dm,aes(x=distance,y=value)) +
     geom_point(aes(color=variable)) +
     scale_color_manual(values=cols,name=NULL) + 
     geom_vline(xintercept=FWHM,color='black',linetype=2,size=0.5) +
-    xlim(c(-1000,1000)) + ylim(c(0,0.0001)) +
+    xlim(c(-1000,1000)) + ylim(c(0,7.5e-5)) +
     theme_std(base_size=12) + 
     theme(legend.position='none') +
     labs(x='Distance from active-TFBS [bp]',y='Proportion of SNPs',title='')

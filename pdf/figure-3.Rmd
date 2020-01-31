@@ -659,30 +659,21 @@ cnt_orig <- fread(here('data/GSE136295_FSR_RNAseq.featureCounts.cnt.csv'))
 info_fields <- names(cnt_orig)[c(1,27:ncol(cnt_orig))] 
 sample_fields <- names(cnt_orig)[names(cnt_orig) %nin% info_fields]   
 cnt <- cnt_orig[,c('ID','transcript_length',sample_fields),with=F]   
+cnt <- replace_barcodes_with_alleles(cnt)
+
 gettpm <- function(cnt) {  
     len <- cnt$transcript_length
     counts <- cnt[,(sample_fields),with=F]
     x <- counts/len 
     t(t(x)*1e6/colSums(x))
 }
+
+sample_fields <- names(cnt)[3:ncol(cnt)]
 res <- as.data.table(gettpm(cnt))
 tpm <- cbind(ID=cnt$ID, res) 
-tpm <- replace_barcodes_with_alleles(tpm)
-
-## prep raw counts for DESeq2
-message('Prepping counts for DESeq2 to find differntially expressed genes ...')
-info_fields <- names(cnt_orig)[c(1,27:ncol(cnt_orig))] 
-sample_fields <- names(cnt_orig)[names(cnt_orig) %nin% info_fields]   
-cnt <- cnt_orig[,c('ID',sample_fields),with=F]   
-cnt <- replace_barcodes_with_alleles(cnt)
-
-## remove genes with low expression (<16 reads)
-#x <- cnt[,2:(ncol(cnt)),with=F]
-#avg_reads_per_gene <- rowMeans(x)
-#low_expression <- cnt$ID[avg_reads_per_gene < 16]
-#cnt <- cnt[ID %nin% low_expression,]
 
 ## subset columns of cnt and tpm for alleles of interest
+message('Prepping counts for DESeq2 to find differntially expressed genes ...')
 keep_fields <- adt(expand.grid(c('WT','EV','E284D','R277T','R277T_E284D'),c('A','B','C'), stringsAsFactors=F))
 keep_fields$Var1 <- factor(keep_fields$Var1, levels=c('WT','EV','E284D','R277T','R277T_E284D'))
 keep_fields <- keep_fields[order(Var1,Var2),]
