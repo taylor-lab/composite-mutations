@@ -1,31 +1,31 @@
 ---
 output: pdf_document
 chunk_output_type: console
+header-includes:
+- \pagenumbering{gobble}
 ---
 
 ```{r setup, include = FALSE, echo = FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, autodep = knitr::dep_prev())
 source(here::here('r/prerequisites.R'))
 
-d_clinical <- fread(here('data/data_clinical.txt'),select=c('Tumor_Sample_Barcode','exclude'))
+d_clinical <- fread(here('data/data_clinical.txt.gz'),select=c('Tumor_Sample_Barcode','exclude'))
 
 ## load starting datasets
-d_mutations <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','PATIENT_ID','exclude','Hugo_Symbol','Role','putative_resistance_mutation',
+d_mutations <- fread(here('data/data_mutations.txt.gz'),select=c('Tumor_Sample_Barcode','PATIENT_ID','exclude','Hugo_Symbol','Role','putative_resistance_mutation',
                                                               'Variant_Classification','Variant_Type','tcn', 'mutationid', 'high_tmb','hotspot_class',
                                                               'tm','hotspotid','HGVSp_Short','truncating','Reference_Allele','Tumor_Seq_Allele2',
                                                               'Start_Position','End_Position'))
 
 ```
 
-### 4A
 
-```{r panel_a, fig.width=8,fig.height=6}
+```{r panel_4a, fig.width=8,fig.height=6}
 ## plot colors
 cols <- c('#EF7B64','#1A89AD','#70C1DF','#BFBFBE')
 names(cols) <- c('Gene + Residue','Gene','Residue','Not significant')
 
-
-## load data for gene and residue enrichment for compound mutations
+## load data for gene and residue enrichment for composite mutations
 gene_enrichment <- fread(here('data/gene_enrichment_precalculated.txt'))
 residue_enrichment <- fread(here('data/residue_enrichment_precalculated.txt'))
 
@@ -112,22 +112,19 @@ p <- ggplot(dat,aes(x=nlog10q.gene.new,y=nlog10q.residue.new)) +
     geom_text_repel(data=gene_labs,aes(x=nlog10q.gene.new,label=label,color=sig),y=0,angle=90,hjust=1.2,vjust=0.5) +
     scale_x_continuous(limits=x_info$limits,labels=x_info$labels,breaks=x_info$breaks) +
     scale_y_continuous(limits=c(-0.5,y_info$limits[2]),labels=y_info$labels,breaks=y_info$breaks) +
-    scale_color_manual(values=cols,name='Leve of enrichment\n(compounds):') +
+    scale_color_manual(values=cols,name='Leve of enrichment\n(composites):') +
     theme_classic(base_family='ArialMT',base_size=14) +
     theme(legend.position='bottom') +
-    labs(x='Gene -log10(q-value)',y='Residue -log10(q-value)',title=NULL)
+    labs(x='Gene -log10(q-value)',y='Residue -log10(q-value)',title='Fig 4a')
 p
 
 ```
 
 \pagebreak
-### 4B
-
-```{r, panel_b, fig.width=6,fig.height=4}
+```{r, panel_4b, fig.width=6,fig.height=4}
 
 tert <- d_mutations
 tert <- tert[Hugo_Symbol=='TERT' & Variant_Classification=='TERT promoter' & exclude==F,]
-
 get_tert_mutation <- function(Start_Position,Reference_Allele,Tumor_Seq_Allele2) {
     Amino_Acid_Position <- as.integer(substr(Start_Position,5,7))
     Reference_Allele <- toupper(Reference_Allele)
@@ -142,52 +139,73 @@ getN <- function(query.mutation, d) {
     mutant_samples <- d$Tumor_Sample_Barcode[d$mutation==query.mutation]
     samples_with_mutation <- d$Tumor_Sample_Barcode[d$Tumor_Sample_Barcode %in% mutant_samples]
     tbl <- table.freq(samples_with_mutation)
-    compound_samples <- tbl$value[tbl$N > 1]
+    composite_samples <- tbl$value[tbl$N > 1]
     singleton_samples <- tbl$value[tbl$N == 1]
-    n_compound <- length(unique(strtrim(compound_samples, 9)))
+    n_composite <- length(unique(strtrim(composite_samples, 9)))
     n_singleton <- length(unique(strtrim(singleton_samples, 9)))
     n_overall <- length(unique(strtrim(tbl$value, 9)))
-    list(mutation=query.mutation,n_compound=n_compound, n_singleton=n_singleton, n_overall=n_overall)
+    list(mutation=query.mutation,n_composite=n_composite, n_singleton=n_singleton, n_overall=n_overall)
 }
 l <- lapply(mutations, getN, tert)
 l <- rbindlist(l)
 
 info <- l[order(n_overall,decreasing=T),]
 info <- info[n_overall >= 5,]
-yinfo <- break_axis(info$n_overall,maxlower=50,minupper=500,lowerticksize=10,upperticksize=1000,ratio_lower_to_upper=0.75)
+yinfo <- break_axis(info$n_overall,maxlower=60,minupper=500,lowerticksize=20,upperticksize=500,ratio_lower_to_upper=0.5)
 info$y_overall <- yinfo$newy
-info$y_compound <- info$y_overall * info$n_compound/info$n_overall
+info$y_composite <- info$y_overall * info$n_composite/info$n_overall
 info$y_singleton <- info$y_overall * info$n_singleton/info$n_overall
-
-infoM <- melt(info[,c('mutation','y_compound','y_singleton'),with=F], id.vars=c('mutation'))
-infoM[variable=='y_compound',variable:='Compound']
+infoM <- melt(info[,c('mutation','y_composite','y_singleton'),with=F], id.vars=c('mutation'))
+infoM[variable=='y_composite',variable:='Composite']
 infoM[variable=='y_singleton',variable:='Singleton']
-infoM$variable <- factor(infoM$variable, levels=c('Singleton','Compound'))
+infoM$variable <- factor(infoM$variable, levels=c('Singleton','Composite'))
 infoM$mutation <- factor(infoM$mutation, levels=rev(info$mutation))
-info$label <- paste0(round(info$n_compound / info$n_overall,3)*100,'%')
-labels <- info[,c('mutation','label','y_compound'),with=F]
+info$label <- paste0(round(info$n_composite / info$n_overall,3)*100,'%')
+labels <- info[,c('mutation','label','y_composite'),with=F]
+toremove <- which(yinfo$labels %in% c(500,1500,2500))
+yinfo$newy <- yinfo$newy[-toremove]
+yinfo$breaks <- yinfo$breaks[-toremove]
+yinfo$labels <- yinfo$labels[-toremove]
+yinfo$limits <- yinfo$limits[-toremove]
 
 cols <- c('#EF7A63','#70C1DF')
-names(cols) <- c('Compound','Singleton')
-
+names(cols) <- c('Composite','Singleton')
 p1 <- ggplot(infoM, aes(x=mutation, y=value)) +
-    geom_bar(stat='identity',aes(fill=variable)) +
+    geom_bar(stat='identity',fill='black') +
     scale_y_continuous(breaks=yinfo$breaks,labels=yinfo$labels,limits=yinfo$limits,expand=c(0,0),position='right') +
-    scale_fill_manual(values=cols, name=NULL) +
-    geom_text(data=labels,aes(label=label,x=mutation,y=y_compound),color='black',hjust=-0.2,vjust=0.5) +
     theme_std(base_size=14) +
-    theme(axis.text.x=element_text(angle=0,hjust=1,vjust=0.5),legend.position='bottom') +
-    labs(x=NULL,y='Number of patients') + 
+    labs(x=NULL,y='Number of patients',title='Fig 4b') + 
     coord_flip()
-p1
+p1 <- extract_gglegend(p1)
+
+## format data for right plot showing the proportion of composite mutants including each mutation
+## to expand the view in the lower proportions, we will plot from 0-25%, and then break axis to 100%
+info2 <- info
+info2$Composite <- info2$n_composite / info2$n_overall
+info2$Singleton <- 1 - info2$Composite
+info2 <- info2[,c('mutation','Composite','Singleton'),with=F]
+info2 <- melt(info2, id.vars='mutation')
+info2$mutation <- factor(info2$mutation, levels=rev(info$mutation))
+info2$variable <- factor(info2$variable, levels=c('Singleton','Composite'))
+info2[value >= 0.25,value:=value-0.75]
+
+p2 <- ggplot(info2, aes(x=mutation, y=value)) +
+    geom_bar(stat='identity',aes(fill=variable)) + 
+    scale_y_continuous(expand=c(0,0),limits=c(0,0.27),breaks=c(0,0.1,0.25),labels=c(0,0.1,1),position='left') + 
+    scale_fill_manual(values=cols,name=NULL) + 
+    theme_std(base_size=14) +
+    theme(axis.text.y=element_blank(),axis.ticks.y=element_blank()) + 
+    labs(x=NULL,y='Fraction',title='') + 
+    coord_flip()
+p2 <- extract_gglegend(p2)
+p <- plot_grid(p1$plot,p2$plot,nrow=1,ncol=2,align='h',rel_widths=c(4,1))
+p <- plot_grid(p,p2$legend,nrow=2,ncol=1,rel_heights=c(4,1))
+p
 
 ```
 
 \pagebreak
-### 4C
-
-```{r, panel_c, fig.width=6,fig.height=4}
-
+```{r, panel_4c, fig.width=6,fig.height=4}
 
 all_samples <- d_clinical$Tumor_Sample_Barcode[d_clinical$exclude==F]
 alleles <- info$mutation
@@ -218,14 +236,12 @@ l <- lapply(1:nrow(x), test_comut, x, tert)
 l <- rbindlist(l)
 l$m1 <- factor(l$m1, levels=alleles)
 l$m2 <- factor(l$m2, levels=alleles)
-#l <- l[m1!=m2,]
 l$label <- l$ab
 l$direction <- 'not significant'
 l[p < 0.01 & OR < 1,direction:='mutually exclusive']
 l[p < 0.01 & OR > 1,direction:='co-occurring']
 l[p >= 0.01 & ab == 0, label:=NA]
 l$logOR <- log2(l$OR)
-
 
 m_ab <- reshape(l[,c('m1','m2','ab'),with=F],idvar='m1',timevar='m2',direction='wide')
 rows <- m_ab$m1
@@ -284,15 +300,13 @@ p <- ggplot(mm, aes(x=m2, y=m1)) +
         axis.line.x=element_blank(),
         axis.ticks.y=element_blank(),
         axis.line.y=element_blank()) + 
-    labs(x=NULL, y=NULL) 
+    labs(x=NULL, y=NULL, title='Fig 4c') 
 p
 
 ```
 
 \pagebreak
-### 4D
-
-```{r, panel_d}
+```{r, panel_4d}
 
 ## load experimental data
 d <- fread(here('data/tert_rlu_luciferase.txt'))
@@ -355,7 +369,7 @@ p <- ggplot(d, aes(x=variable, y=mu, ymin=lwr, ymax=upr, fill=line)) +
     theme_std(base_size=14) +
     theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1),axis.line.y=element_blank()) +
     scale_y_continuous(expand=c(0,0), breaks=seq(0,350,by=50),limits=c(0,550)) +
-    labs(x='TERT promoter allele',y='RLU Luciferase') 
+    labs(x='TERT promoter allele',y='RLU Luciferase',title='Fig 4d') 
     for(i in 1:nrow(out2)) p <- p + geom_signif(comparisons=list(c(out2$allele1[i],out2$allele2[i])), y_position = out2$ypos[i] + 5,
                                              annotations=out2$p.anova[i],family='ArialMT',size=0.5,tip_length=0)
 
