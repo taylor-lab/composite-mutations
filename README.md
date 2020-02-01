@@ -1,8 +1,5 @@
 # composite-mutations
 
-Companion code to the paper: \
-**__Pervasive composite oncogenic mutations in cancer__**
-
 Code in this repository can be used to recreate the essential parts of the main figures in the manuscript. All code is in R (>=3.5.0).
 
 ### Instructions
