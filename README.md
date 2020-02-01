@@ -21,10 +21,10 @@ if(!'DESeq2' %in% installed.packages()) {
 
 (Optional) Several datasets used in this manuscript can take multiple hours to run. For convenience, precalculated results from these tests are available in the `data/` directory. These can be regenerated with the following commands:
 ```shell
-Rscript r/run_gene_enrichment_test.R                    ## generates data/gene_enrichment.txt
-Rscript r/run_residue_enrichment_test.R                 ## generates data/residue_enrichment.txt
-Rscript r/run_compound_rate_permutation_test.R          ## generates data/observed_vs_expected_compounds_impact.rds
-Rscript r/run_compound_rate_permutation_test_per_tmb.R  ## generates data/observed_vs_expected_compounds_impact_per_tmb.rds
+Rscript r/run_gene_enrichment_test.R                     ## generates data/gene_enrichment.txt
+Rscript r/run_residue_enrichment_test.R                  ## generates data/residue_enrichment.txt
+Rscript r/run_composite_rate_permutation_test.R          ## generates data/observed_vs_expected_composite_impact.rds
+Rscript r/run_composite_rate_permutation_test_per_tmb.R  ## generates data/observed_vs_expected_composite_impact_per_tmb.rds
 ```
 
 Generate HTML files containing graphics for each main figure from the command line, which can be viewed in your web browser:
@@ -45,4 +45,4 @@ R -e "rmarkdown::render('do/text_values.Rmd', output_file = 'text_values.html')"
 - DOI: **pending**
 
 ### Contact
-E-mail any questions to [gorelica@mskcc.org](mailto:gorelica@mskcc.org?subject=[GitHub]%20Compound-Mutations%20paper).
+E-mail any questions to [gorelica@mskcc.org](mailto:gorelica@mskcc.org?subject=[GitHub]%20Composite-Mutations%20paper).
