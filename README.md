@@ -34,15 +34,15 @@ Rscript r/run_composite_rate_permutation_test_per_tmb.R  ## generates data/obser
 
 Generate HTML files containing graphics for each main figure from the command line, which can be viewed in your web browser:
 ```shell
-R -e "rmarkdown::render('figures/figure-1.Rmd', output_file = 'figure-1.html')"
-R -e "rmarkdown::render('figures/figure-2.Rmd', output_file = 'figure-2.html')"
-R -e "rmarkdown::render('figures/figure-3.Rmd', output_file = 'figure-3.html')"
-R -e "rmarkdown::render('figures/figure-4.Rmd', output_file = 'figure-4.html')"
+R -e "rmarkdown::render('html/figure-1.Rmd', output_file = 'figure-1.html')"
+R -e "rmarkdown::render('html/figure-2.Rmd', output_file = 'figure-2.html')"
+R -e "rmarkdown::render('html/figure-3.Rmd', output_file = 'figure-3.html')"
+R -e "rmarkdown::render('html/figure-4.Rmd', output_file = 'figure-4.html')"
 ```
 
 An HTML file containing values references in the main text can also be generated:
 ```shell
-R -e "rmarkdown::render('do/text_values.Rmd', output_file = 'text_values.html')"
+R -e "rmarkdown::render('html/text_values.Rmd', output_file = 'text_values.html')"
 ```
 
 ### Citation
