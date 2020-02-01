@@ -38,7 +38,9 @@ Rscript r/run_residue_enrichment_test.R
 Rscript r/run_tmb_permutation_tests.R
 
 ## generate data/cancertype_enrichment_permutation_test.txt
-## warning: this can only be run on a linux-based compute cluster with LSF installed for job scheduling (default resources requested per LSF job are 32GB RAM and 24 available cores.
+## warning: this can only be run on a linux-based compute cluster 
+## with LSF installed for job scheduling 
+## (default resources requested per LSF job are 32GB RAM and 24 available cores)
 Rscript r/run_cancertype_permutation_tests.R
 ```
 
