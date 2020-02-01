@@ -1,6 +1,6 @@
 # Composite mutations
 
-![alt text](https://github.com/taylor-lab/composite-mutations/blob/master/fig1a.png "Hi there!")
+![alt text](https://github.com/taylor-lab/composite-mutations/blob/master/data/fig1a.png "Hi there!")
 
 
 ### Instructions

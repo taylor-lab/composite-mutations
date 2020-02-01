@@ -13,39 +13,6 @@ title: "`r params$set_title`"
 ```{r setup, include = FALSE, echo = FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, autodep = knitr::dep_prev())
 source(here::here('r/prerequisites.R'))
-
-```{r panel_edf_unk1}
-
-## load data from permutations
-perm <- readRDS(here::here('data/observed_vs_expected_composites_impact_precalculated.rds'))
-obs <- perm$obs_all
-exp <- median(perm$dat_all$prop)
-
-## plot results (figure 1c in paper)
-perm$dat$group <- 'All samples'
-plot_dat <- perm$dat
-plot_dat$data <- 'Randomly shuffled'
-plot_dat$prop <- plot_dat$prop * 100
-obs_dat <- data.table(group='All samples')
-obs_dat$prop <- perm$obs*100
-obs_dat$data <- 'Observed'
-pd <- rbind(plot_dat, obs_dat, fill=T)
-x <- break_axis(pd$prop,maxlower=16,minupper=22,lowerticksize=1,upperticksize=1,ratio_lower_to_upper=0.5)
-pd$prop2 <- x$newy
-expected_color <- c('black','red')
-names(expected_color) <- c('Randomly shuffled','Observed')
-
-p <- ggplot(pd,aes(x=prop2)) +
-    geom_histogram(binwidth=0.1,aes(fill=data),color='white',size=0.2) +
-    geom_vline(data=pd[data=='Observed',],aes(xintercept=prop2),color='red',linetype='dashed',size=0.5) +
-    scale_fill_manual(values=expected_color,name=NULL) +
-    scale_x_continuous(breaks=c(x$breaks,18), labels=c(x$labels,24), limits=c(13.8,18.1)) +
-    scale_y_continuous(expand=c(0,0)) +
-    labs(x='Percentage',y='100,000 Random shuffles',title='EDF-unk') +
-    theme_std(base_size=14) +
-    theme(legend.position='none')
-p
-
 ```
 
 ***
