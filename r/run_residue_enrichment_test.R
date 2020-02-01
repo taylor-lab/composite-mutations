@@ -1,13 +1,13 @@
 ## This script will test individually recurrent variants in the mutation data
-## for enriched or depleted incidence as part of a compound mutation.
-## It will generate the file: data/residue_enrichment.txt
+## for enriched incidence as part of a composite mutation.
+## output: data/residue_enrichment.txt
 
 
 source(here::here('r/prerequisites.R'))
-
+cpus <- cpu_prompt()
 
 test_mutation <- function(query_mutation,dd) {
-    ## function to test a mutation for enrichment in compound mutations
+    ## function to test a mutation for enrichment in composite mutations
     
     message(query_mutation)
     query_gene <- strsplit(query_mutation,' ')[[1]][1]
@@ -16,21 +16,21 @@ test_mutation <- function(query_mutation,dd) {
     hotspot_class <- paste(sortunique(dd$hotspot_class[dd$tm %in% query_mutation]),collapse=',')
     oncogenic <- paste(sortunique(dd$oncogenic[dd$tm %in% query_mutation]),collapse=',')
 
-    samples_with_compound_mutation_in_gene <- sortunique(dd$Tumor_Sample_Barcode[dd$Hugo_Symbol %in% query_gene & dd$compound==T])
-    samples_with_compound_mutation_including_residue <- sortunique(dd$Tumor_Sample_Barcode[dd$tm %in% query_mutation & dd$compound==T])
-    samples_with_compound_mutation_not_including_residue <- samples_with_compound_mutation_in_gene[samples_with_compound_mutation_in_gene %nin% samples_with_compound_mutation_including_residue] 
+    samples_with_composite_mutation_in_gene <- sortunique(dd$Tumor_Sample_Barcode[dd$Hugo_Symbol %in% query_gene & dd$composite==T])
+    samples_with_composite_mutation_including_residue <- sortunique(dd$Tumor_Sample_Barcode[dd$tm %in% query_mutation & dd$composite==T])
+    samples_with_composite_mutation_not_including_residue <- samples_with_composite_mutation_in_gene[samples_with_composite_mutation_in_gene %nin% samples_with_composite_mutation_including_residue] 
 
-    samples_with_singleton_mutation_in_gene <- sortunique(dd$Tumor_Sample_Barcode[dd$Hugo_Symbol %in% query_gene & dd$compound==F])
-    samples_with_singleton_mutation_including_residue <- sortunique(dd$Tumor_Sample_Barcode[dd$tm %in% query_mutation & dd$compound==F])
+    samples_with_singleton_mutation_in_gene <- sortunique(dd$Tumor_Sample_Barcode[dd$Hugo_Symbol %in% query_gene & dd$composite==F])
+    samples_with_singleton_mutation_including_residue <- sortunique(dd$Tumor_Sample_Barcode[dd$tm %in% query_mutation & dd$composite==F])
     samples_with_singleton_mutation_not_including_residue <- samples_with_singleton_mutation_in_gene[samples_with_singleton_mutation_in_gene %nin% samples_with_singleton_mutation_including_residue] 
 
     n.samples_with_singleton_mutation_including_residue = length(unique(strsplit(samples_with_singleton_mutation_including_residue,9)))
     n.samples_with_singleton_mutation_not_including_residue = length(unique(strsplit(samples_with_singleton_mutation_not_including_residue,9)))
-    n.samples_with_compound_mutation_including_residue = length(unique(strsplit(samples_with_compound_mutation_including_residue,9)))
-    n.samples_with_compound_mutation_not_including_residue = length(unique(strsplit(samples_with_compound_mutation_not_including_residue,9)))
+    n.samples_with_composite_mutation_including_residue = length(unique(strsplit(samples_with_composite_mutation_including_residue,9)))
+    n.samples_with_composite_mutation_not_including_residue = length(unique(strsplit(samples_with_composite_mutation_not_including_residue,9)))
 
     m <- rbind(c(n.samples_with_singleton_mutation_not_including_residue,n.samples_with_singleton_mutation_including_residue),
-               c(n.samples_with_compound_mutation_not_including_residue,n.samples_with_compound_mutation_including_residue))
+               c(n.samples_with_composite_mutation_not_including_residue,n.samples_with_composite_mutation_including_residue))
 
     ## two-sided p-values for text
     tst <- fisher.test(m,alternative='two.sided')
@@ -60,8 +60,8 @@ test_mutation <- function(query_mutation,dd) {
          query_mutation=query_mutation,
          n.samples_with_singleton_mutation_including_residue=n.samples_with_singleton_mutation_including_residue,
          n.samples_with_singleton_mutation_not_including_residue=n.samples_with_singleton_mutation_not_including_residue,
-         n.samples_with_compound_mutation_including_residue=n.samples_with_compound_mutation_including_residue,
-         n.samples_with_compound_mutation_not_including_residue=n.samples_with_compound_mutation_not_including_residue,
+         n.samples_with_composite_mutation_including_residue=n.samples_with_composite_mutation_including_residue,
+         n.samples_with_composite_mutation_not_including_residue=n.samples_with_composite_mutation_not_including_residue,
          OR=OR,
          p.value.two.sided=p.value.two.sided,
          p.value.enriched=p.value.enriched,
@@ -75,17 +75,18 @@ test_mutation <- function(query_mutation,dd) {
 
 
 ## load/format mutation data
-d_mutations <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','exclude','Hugo_Symbol','putative_resistance_mutation',
-                                                              'Variant_Classification','Variant_Type','tcn', 'mutationid', 'high_tmb','hotspot_class',
-                                                              'tm','hotspotid','HGVSp_Short','truncating'))
+d_mutations <- fread(here('data/data_mutations.txt.gz'),
+                     select=c('Tumor_Sample_Barcode','exclude','Hugo_Symbol','putative_resistance_mutation',
+                              'Variant_Classification','Variant_Type','tcn', 'mutationid', 'high_tmb','hotspot_class',
+                              'tm','hotspotid','HGVSp_Short','truncating','Start_Position'))
 d <- d_mutations[exclude==F & putative_resistance_mutation==F]
 d[hotspotid!='',tm:=hotspotid] ## in cases of INDEL hotspots, group mutation IDs together into the hotspot cluster
 d[Variant_Classification=='TERT promoter', tm:=paste('TERT',gsub('p[.]','',HGVSp_Short))]
-d <- d[,c('Tumor_Sample_Barcode','Hugo_Symbol','tm','putative_resistance_mutation','mutationid','exclude','truncating','hotspotid','Variant_Classification'),with=F]
+d <- d[,c('Tumor_Sample_Barcode','Hugo_Symbol','tm','putative_resistance_mutation','mutationid','exclude','truncating','hotspotid','Variant_Classification','Start_Position'),with=F]
 
 
-## load/format phasing data
-d_phased <- fread(here('data/data_mutations_phased.txt'))
+## load/format phasing data for annotation the results
+d_phased <- fread(here('data/data_mutations_phased.txt.gz'))
 d_phased <- d_phased[exclude==F & putative_resistance_mutation.1==F & putative_resistance_mutation.2==F]
 d_phased$id <- paste(d_phased$mutationid.1,d_phased$mutationid.2,sep=' + ')
 d_phased <- d_phased[!duplicated(id),]
@@ -100,8 +101,10 @@ phased[,variable:=NULL]
 setnames(phased,'value','mutationid')
 
 
-## annotate the rate of cis/trans compounds with each mutation in the table
-## annotate phase of all mutations (NB: a single mutation in a sample with 3+ mutations in compound can have multiple phases)
+
+## here we annotate the rate of cis/trans composites with each mutation in the table
+## annotate phase of all mutations (NB: a single mutation in a sample with 
+## 3+ mutations in composite can have multiple phases)
 annotate_phases_of_variant <- function(query.mutationid,phased) {
     phased <- phased[mutationid==query.mutationid,]
     if(nrow(phased) > 0) {
@@ -121,21 +124,28 @@ annotate_phases_of_variant <- function(query.mutationid,phased) {
     }
     list(mutationid=query.mutationid, cis=cis, trans=trans, trans_or_separate_cells=trans_or_separate_cells, ambiguous=ambiguous, unknown=unknown, not_phased=not_phased)
 }
-l <- mclapply(d$mutationid, annotate_phases_of_variant, phased, mc.cores=14)
+
+message('Annotating phase info for mutations ...')
+l <- mclapply(d$mutationid, annotate_phases_of_variant, phased, mc.cores=cpus)
 ll <- rbindlist(l)
 d <- merge(d, ll, by='mutationid', all.x=T)
 d$tsbgene <- paste(d$Tumor_Sample_Barcode,d$Hugo_Symbol)
 
-## annotate compounds (including the phased and not-phased)
+## annotate composites (including the phased and not-phased)
 tbl <- table.freq(d$tsbgene)
 d <- merge(d, tbl, by.x='tsbgene', by.y='value', all.x=T)
-d$compound <- d$N > 1
+d$composite <- d$N > 1
 d[,N:=NULL]
 
-## annotate non-compounds as NA for not phased
-d[compound==F,not_phased:=NA]
+## annotate non-composites as NA for not phased
+d[composite==F,not_phased:=NA]
+d <- d[order(Hugo_Symbol, Start_Position),]
+
+
+
 
 ## test SNP residues and in-frame INDELS mutated in 5+ patients
+message('Testing residues, in-frame indels and TERT promoter alleles mutated in 5+ patients for enrichment ...')
 tmp <- d[,c('tm','Tumor_Sample_Barcode'),with=F]
 tmp$pid <- strtrim(tmp$Tumor_Sample_Barcode,9)
 summarize_tm <- function(d) {
@@ -144,7 +154,7 @@ summarize_tm <- function(d) {
 }
 info <- tmp[,summarize_tm(.SD),by=tm]
 test_mutations <- info$tm[info$n_pts >= 5]
-l <- mclapply(test_mutations, test_mutation, d, mc.cores=14)
+l <- mclapply(test_mutations, test_mutation, d, mc.cores=cpus)
 ll <- rbindlist(l)
 ll <- ll[order(p.value.enriched,decreasing=F),]
 ll$q.value.enriched <- p.adjust(ll$p.value.enriched,method='BH')
@@ -153,6 +163,7 @@ ll <- merge(ll, d[!duplicated(tm),c('tm','hotspotid'),with=F], by.x='query_mutat
 
 ## save result
 write.tsv(ll,here('data/residue_enrichment.txt'))
+message('Done!')
 
 
 
