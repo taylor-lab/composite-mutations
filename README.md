@@ -1,10 +1,11 @@
-# composite-mutations
+# Composite mutations
 
 ![alt text](https://github.com/taylor-lab/composite-mutations/blob/master/fig1a.png "Hi there!")
 
-Code in this repository can be used to recreate the essential parts of the main figures in the manuscript. All code is in R (>=3.5.0).
 
 ### Instructions
+Code in this repository can be used to recreate the essential parts of the main figures in the manuscript. All code is in R (>=3.5.0).
+
 Install required R packages from CRAN and Bioconductor:
 ```r
 ## check for missing required packages, install them
