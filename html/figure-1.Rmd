@@ -51,6 +51,7 @@ p
 ***
 
 \pagebreak
+
 # Fig 1b
 
 ```{r panel_1b}
@@ -91,6 +92,7 @@ plot_grid(p.pvals,p.hist,align='v',rel_heights=c(1,1),ncol=1,nrow=2)
 ***
 
 \pagebreak
+
 # Fig 1c
 
 ```{r panel_1c, fig.height=10, fig.width=8}
@@ -228,6 +230,7 @@ plot_grid(pie,pie2,ncol=1,nrow=2)
 ***
 
 \pagebreak
+
 # Fig 1d
 
 ```{r panel_1d,fig.width=6,fig.height=2.25}
@@ -363,6 +366,7 @@ p
 ***
 
 \pagebreak
+
 # Fig 1e
 
 ```{r panel_1e,fig.width=6,fig.height=2.25}

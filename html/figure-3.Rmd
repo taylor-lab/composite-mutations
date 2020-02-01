@@ -24,6 +24,7 @@ d_phased <- d_phased[!duplicated(id),]
 ***
 
 \pagebreak
+
 # Fig 3a
 
 ```{r panel_3a, fig.width=6,fig.height=8}
@@ -140,6 +141,7 @@ p
 ***
 
 \pagebreak
+
 # Fig 3b
 
 ```{r, panel_3b,fig.width=3,fig.height=5}
@@ -321,6 +323,7 @@ p
 ***
 
 \pagebreak
+
 # Fig 3c
 
 ```{r, panel_3c}
@@ -428,6 +431,7 @@ p
 ***
 
 \pagebreak
+
 # Fig 3d
 
 ```{r, panel_3d, fig.width=8,fig.height=5}
@@ -632,6 +636,7 @@ p
 ***
 
 \pagebreak
+
 # Fig 3f
 
 ```{r, panel_3f, fig.width=6,fig.height=6}
@@ -689,7 +694,7 @@ cnt[,c('ID'):=NULL]
 cnt <- as.matrix(cnt)
 rownames(cnt) <- ids
 fields <- colnames(cnt)
-coldata <- data.frame(id=fields)
+coldata <- data.frame(id=fields,stringsAsFactors=F)
 coldata$allele <- substr(coldata$id,1,(nchar(coldata$id)-2))
 coldata$replicate <- substr(coldata$id,(nchar(coldata$id)-0),nchar(coldata$id))
 rownames(coldata) <- coldata$id

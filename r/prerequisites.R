@@ -2,24 +2,15 @@
 # load required packages
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-require(data.table)
-require(R.utils)
-require(ggplot2)
-require(cowplot)
-require(RColorBrewer)
-require(parallel)
-require(ggsignif)
-require(binom)
-require(scales)
-require(MASS)
-require(ggrepel)
-require(Hmisc)
-require(Rcpp)
-require(DESeq2)
-require(pheatmap)
-require(car)
-require(here)
-require(magrittr)
+
+required.packages <- c('data.table','ggplot2','cowplot','RColorBrewer',
+                       'parallel','ggsignif','binom','scales',
+                       'MASS','ggrepel','Hmisc','Rcpp','pheatmap',
+                       'car','here','magrittr','knitr','rmarkdown','DESeq2')
+lapply(required.packages, require, character.only = TRUE)
+missing.packages <- required.packages[!required.packages %in% (.packages())]
+if(length(missing.packages)>0) stop(paste('Could not load required packages:',paste(missing.packages,collapse=', ')))
+
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

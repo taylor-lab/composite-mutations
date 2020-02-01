@@ -28,6 +28,7 @@ d_mutations <- fread(here('data/data_mutations.txt.gz'),select=c('Tumor_Sample_B
 ***
 
 \pagebreak
+
 # Fig 4a
 
 ```{r panel_4a, fig.width=8,fig.height=6}
@@ -133,6 +134,7 @@ p
 ***
 
 \pagebreak
+
 # Fig 4b
 
 ```{r, panel_4b, fig.width=6,fig.height=4}
@@ -221,6 +223,7 @@ p
 ***
 
 \pagebreak
+
 # Fig 4c
 
 ```{r, panel_4c, fig.width=6,fig.height=4}
@@ -326,6 +329,7 @@ p
 ***
 
 \pagebreak
+
 # Fig 4d
 
 ```{r, panel_4d}

@@ -14,7 +14,6 @@ title: "`r params$set_title`"
 ```{r setup, include = FALSE, echo = FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, autodep = knitr::dep_prev())
 source(here::here('r/prerequisites.R'))
-
 ## load starting datasets
 d_mutations <- fread(here('data/data_mutations.txt.gz'),select=c('Tumor_Sample_Barcode','PATIENT_ID','exclude','Hugo_Symbol','Role','putative_resistance_mutation',
                                                               'Variant_Classification','Variant_Type','tcn', 'mutationid', 'high_tmb','hotspot_class',
@@ -31,6 +30,7 @@ d_phased <- d_phased[!duplicated(id),]
 ***
 
 \pagebreak
+
 # Fig 2a
 
 ```{r panel_2a, fig.width=8,fig.height=10}
@@ -145,6 +145,7 @@ p
 ***
 
 \pagebreak
+
 # Fig 2b
 
 ```{r panel_2b, fig.width=7,fig.height=6}
@@ -216,6 +217,7 @@ p
 ***
 
 \pagebreak
+
 # Fig 2c
 
 ```{r panel_2c, fig.width=6, fig.height=6}
@@ -365,6 +367,7 @@ p
 ***
 
 \pagebreak
+
 # Fig 2d
 
 ```{r, panel_2d, fig.width=6.5, fig.height=2.5}
