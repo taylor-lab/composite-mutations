@@ -26,10 +26,19 @@ if(!'DESeq2' %in% installed.packages()) {
 
 (Optional) Several datasets used in this manuscript can take multiple hours to run. For convenience, precalculated results from these tests are available in the `data/` directory. These can be regenerated with the following commands:
 ```shell
-Rscript r/run_gene_enrichment_test.R                     ## generates data/gene_enrichment.txt
-Rscript r/run_residue_enrichment_test.R                  ## generates data/residue_enrichment.txt
-Rscript r/run_composite_rate_permutation_test.R          ## generates data/observed_vs_expected_composite_impact.rds
-Rscript r/run_composite_rate_permutation_test_per_tmb.R  ## generates data/observed_vs_expected_composite_impact_per_tmb.rds
+
+## generate data/gene_enrichment.txt
+Rscript r/run_gene_enrichment_test.R
+
+## generate data/residue_enrichment.txt
+Rscript r/run_residue_enrichment_test.R
+
+## generate:  
+## - data/observed_vs_expected_composite_impact.rds
+## - data/observed_vs_expected_composites_per_tmb_impact.rds
+## - data/observed_vs_expected_composites_tcga.rds
+## warning: this can take hours to finish 
+Rscript r/run_composite_rate_permutation_test.R          
 ```
 
 Generate HTML files containing graphics for each main figure from the command line, which can be viewed in your web browser:
