@@ -1,8 +1,13 @@
 ---
-output: pdf_document
+output: 
+    html_document:
+        css: style.css
 chunk_output_type: console
 header-includes:
 - \pagenumbering{gobble}
+params:
+    set_title: "Figure-1"
+title: "`r params$set_title`"
 ---
 
 ```{r setup, include = FALSE, echo = FALSE}
@@ -43,7 +48,11 @@ p
 
 ```
 
+***
+
 \pagebreak
+# Fig 1b
+
 ```{r panel_1b}
 
 ## extract/merge the shuffled composite rate
@@ -65,7 +74,7 @@ p.pvals <- ggplot(dat,aes(x=burden,y=nlog10p)) +
     geom_bar(stat='identity',width=0.9,fill='black') +
     scale_x_continuous(breaks=seq(0,40,by=5),limits=c(0,40.5),expand=c(0,0)) +
     scale_y_continuous(expand=c(0,0)) +
-    labs(x=NULL,y='-log10(p)',title='Fig 1b') +
+    labs(x=NULL,y='-log10(p)') +
     theme_std(base_size=14) +
     theme(axis.text.x=element_blank(),axis.ticks.x=element_blank(),axis.line.x=element_blank())
 
@@ -79,7 +88,11 @@ p.hist <- ggplot(dat,aes(x=burden,y=N)) +
 plot_grid(p.pvals,p.hist,align='v',rel_heights=c(1,1),ncol=1,nrow=2)
 ```
 
+***
+
 \pagebreak
+# Fig 1c
+
 ```{r panel_1c, fig.height=10, fig.width=8}
 
 ## generate data used for pie chart:
@@ -187,8 +200,7 @@ pie <- ggplot(tbl1, aes(x="", y=prop, fill=`Composite mutations`))+
     geom_bar(width = 1, stat = "identity") + 
     coord_polar("y", start=0) +
     piechart_theme +
-    scale_fill_manual(values=mycols1,name=paste0('Sample has composite mutations\n(',samples_overall,')')) +
-    ggtitle('Fig 1c')
+    scale_fill_manual(values=mycols1,name=paste0('Sample has composite mutations\n(',samples_overall,')'))
 
 
 ## pie chart 2: possible explanation for composites
@@ -213,8 +225,12 @@ pie2 <- ggplot(tbl2, aes(x="", y=prop, fill=reason),color='black')+
 plot_grid(pie,pie2,ncol=1,nrow=2)
 ```
 
+***
+
 \pagebreak
-```{r panel_1d,fig.width=5,fig.height=2.25}
+# Fig 1d
+
+```{r panel_1d,fig.width=6,fig.height=2.25}
 
 ## load mutation data
 d <- fread(here('data/data_mutations.txt.gz'),select=c('exclude','putative_resistance_mutation','Tumor_Sample_Barcode','Hugo_Symbol','Role'))
@@ -263,7 +279,7 @@ p <- ggplot(ci,aes(x=Role,y=mean)) +
     theme_std(base_size=14) +
     #theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
     coord_flip() + 
-    labs(x=NULL,y='% of cases with\ncomposite mutation',title='Fig 1d')
+    labs(x=NULL,y='% of cases with\ncomposite mutation')
 p
 
 
@@ -344,9 +360,12 @@ p
 
 ```
 
+***
 
 \pagebreak
-```{r panel_1e,fig.width=5,fig.height=2.25}
+# Fig 1e
+
+```{r panel_1e,fig.width=6,fig.height=2.25}
 
 ## load phased data with pairwise-mutation comparison
 d <- fread(here('data/data_mutations_phased.txt.gz'),select=c('Tumor_Sample_Barcode','exclude','putative_resistance_mutation.1','putative_resistance_mutation.2',
@@ -405,7 +424,7 @@ p <- ggplot(dat2, aes(x=Role,y=value)) +
     geom_errorbar(data=ci,aes(min=lower,max=value),color='white',width=0) +
     geom_errorbar(data=ci,aes(min=value,max=upper),color='black',width=0) +
     scale_y_continuous(expand=c(0,0),limits=c(0,115),breaks=seq(0,100,by=25),position='right') +
-    labs(x=NULL,y='% of composite mutants',title='Fig 1e') +
+    labs(x=NULL,y='% of composite mutants') +
     theme_std(base_size=14) +
     theme(legend.position='bottom') + #axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
     coord_flip()

@@ -1,4 +1,9 @@
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# load required packages
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 require(data.table)
+require(R.utils)
 require(ggplot2)
 require(cowplot)
 require(RColorBrewer)
@@ -16,55 +21,14 @@ require(car)
 require(here)
 require(magrittr)
 
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# define commonly used objects and helper functions
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 important_classes <- c('Missense_Mutation','Nonsense_Mutation','Splice_Site','In_Frame_Del','In_Frame_Ins',
                        'Frame_Shift_Del','Frame_Shift_Ins','TERT promoter','Translation_Start_Site')
 truncating_classes <- c('Nonsense_Mutation','Splice_Site','Frame_Shift_Del','Frame_Shift_Ins')
-
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# define commonly used colors for figures
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-colors <- list()
-
-## 2-level enrichment (significant, NS)
-sig2 <- c('#e50000','#a6a6a6')
-names(sig2) <- c('Enriched','Not significant')
-colors$sig2 <- sig2
-
-## 3-level enrichment (enriched/NS/depleted)
-sig3 <- c('#B2182B','#BFBFBF','#2166AC')
-names(sig3) <- c('Enriched','Not significant','Depleted')
-colors$sig3 <- sig3
-
-## compounds
-compound <- c('#cccccc','#005b96') ## gray / blue
-names(compound) <- c('Singleton','Compound')
-colors$compound <- compound
-
-## expected vs observed
-observed <- c('#003366','#bea893')
-names(observed) <- c('Observed','Expected')
-colors$observed <- observed
-
-## 2-level phase
-phase2 <- c('#CE1256','#0057e7')
-names(phase2) <- c('Cis','Trans')
-colors$phase2 <- phase2
-
-## oncogene/TSG/na 
-role <- c('#5a7f48','#91b4ff','#D9D9D9','black')
-names(role) <- c('Oncogene','TSG','Oncogene/TSG','n/a')
-colors$role <- role
-
-## 2-color bar plot
-barplot2col <- c('#000000','#D9D9D9')
-colors$barplot2col <- barplot2col
-
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# define helper functions
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 ## ggplot theme
@@ -182,53 +146,14 @@ sortunique <- function(x,...) {
 }
 
 
-## generate a qq-plot in ggplot2
-gg_qqplot <- function(xs, labels=NULL, ci=0.95, show.lambda=T) {
-
-    # inspired by gg_qqplot.R
-    # Kamil Slowikowski
-    # February 16, 2014
-
-    ## remove NAs from pvalues
-    xs <- xs[!is.na(xs)]
-
-    ## generate qqplot
-    N = length(xs)
-    df = data.frame(observed=-log10(sort(xs)),
-                    expected=-log10(1:N / N),
-                    p=sort(xs),
-                    cupper=-log10(qbeta(ci,     1:N, N - 1:N + 1)),
-                    clower=-log10(qbeta(1 - ci, 1:N, N - 1:N + 1)))
-    if(!is.null(labels)) df$label <- labels
-
-    ## make plot
-    log10Pe = expression(paste("Expected -log"[10], plain(P)))
-    log10Po = expression(paste("Observed -log"[10], plain(P)))
-    p <- ggplot(df,aes(x=expected,y=observed)) +
-    geom_point(pch=21, size=2, color='black') +
-    geom_abline(intercept=0, slope=1, alpha=0.5) +
-    geom_line(aes(expected, cupper), linetype=2) +
-    geom_line(aes(expected, clower), linetype=2) +
-    xlab(log10Pe) +
-    ylab(log10Po)
-
-    if(!is.null(labels)) p <- p + geom_text_repel(aes(label=label), color='blue',size=4, na.rm=T)
-    if(show.lambda) {
-        ## calculate lambda
-        set.seed(1234)
-        chisq <- qchisq(1 - xs, 1)
-        lambda <- paste('lambda =',round(median(chisq) / qchisq(0.5, 1),4))
-        message(lambda)
-        lambda_dat <- data.table(x=0.20*max(df$expected),y=0.93*max(df$observed),label=lambda)
-        p <- p + geom_text(data=lambda_dat,aes(x=x,y=y,label=label),color='red',size=6)
-    }
-    p
-}
-
 ## shortcut to write tab-delimited data with consistent format 
 write.tsv <- function(d, file, sep = "\t", quote = F, row.names = F, ...) {
     write.table(d, file = file, sep = sep, quote = quote, row.names = row.names, ...)
 }
 
+
 ## shortcut for as.data.table
 adt <- function(d) as.data.table(d)
+
+
+

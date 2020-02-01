@@ -1,8 +1,13 @@
 ---
-output: pdf_document
+output:
+    html_document:
+        css: style.css
 chunk_output_type: console
 header-includes:
 - \pagenumbering{gobble}
+params: 
+    set_title: "Figure-2"
+title: "`r params$set_title`"
 ---
 
 
@@ -22,6 +27,11 @@ d_phased$id <- paste(d_phased$mutationid.1,d_phased$mutationid.2,sep=' + ')
 d_phased <- d_phased[!duplicated(id),]
 
 ```
+
+***
+
+\pagebreak
+# Fig 2a
 
 ```{r panel_2a, fig.width=8,fig.height=10}
 
@@ -122,7 +132,7 @@ p_hist <- ggplot(pd3, aes(x=tt,y=mu,group=type)) +
     theme_std(base_size=14) +
     scale_y_continuous(expand=c(0,0),breaks=seq(0,60,by=20),limits=c(0,60)) +
     theme(axis.text.x=element_blank(),axis.ticks.x=element_blank()) +
-    labs(x=NULL,y='% of cases',title='Fig 2a')
+    labs(x=NULL,y='% of cases')
 p_hist <- extract_gglegend(p_hist)
 
 p <- plot_grid(p_hist$plot, p_heatmap$plot, align='v', ncol=1, nrow=2,rel_heights=c(1,6))    
@@ -132,6 +142,10 @@ p
 
 ```
 
+***
+
+\pagebreak
+# Fig 2b
 
 ```{r panel_2b, fig.width=7,fig.height=6}
 
@@ -188,7 +202,7 @@ get_qqplot <- function(dat) {
 p1 <- get_qqplot(d) +
     theme(legend.position='none',axis.line.x=element_blank(),axis.ticks.x=element_blank(),axis.text.x=element_blank()) +
     scale_y_continuous(limits=c(40,150),breaks=seq(50,150,by=50)) + 
-    labs(x=NULL,y=NULL,title='Fig 2b') 
+    labs(x=NULL,y=NULL) 
     
 p2 <- get_qqplot(d[q_enriched > 0,]) + 
     ylim(0,30) +
@@ -199,8 +213,12 @@ p
 
 ```
 
+***
+
 \pagebreak
-```{r panel_c, fig.width=6, fig.height=6}
+# Fig 2c
+
+```{r panel_2c, fig.width=6, fig.height=6}
 
 ## load MAF, subset for hotspot SNPs among valid samples
 d <- d_mutations
@@ -336,7 +354,7 @@ p2 <- ggplot(ci,aes(x=mutation, y=mean)) +
     theme_std(base_size=14) +
     theme(legend.position='none',axis.text.x=element_text(angle=0,hjust=0.5,vjust=0),plot.margin = margin(0.2, 3.5, 0.2, 3.5, "cm")) + 
     coord_flip() + 
-    labs(x=NULL,y='% hotspots',title='Fig 2c')
+    labs(x=NULL,y='% hotspots')
 
 ## show the combined plot
 p <- plot_grid(p2, p1, rel_heights=c(1,4), ncol=1, nrow=2)
@@ -344,8 +362,12 @@ p
 
 ```
 
+***
+
 \pagebreak
-```{r, panel_d, fig.width=6.5, fig.height=2.5}
+# Fig 2d
+
+```{r, panel_2d, fig.width=6.5, fig.height=2.5}
 
 get_ordered_variants <- function(d_phased, d_mutations) {
     d_phased <- d_phased[putative_resistance_mutation.1==F & putative_resistance_mutation.2==F & exclude==F,]
@@ -474,7 +496,7 @@ p <- ggplot(m, aes(x=role,y=mean)) +
     scale_fill_manual(values=cols, name='More prevalent\nallele mutated\nfirst:') +
     theme_std(base_size=14) +
     scale_y_continuous(expand=c(0,0),position='right') + 
-    labs(x=NULL,y='% timeable composite mutations', title='Fig 2d') + 
+    labs(x=NULL,y='% timeable composite mutations') + 
     theme(strip.background=element_blank()) +
     coord_flip()
 p

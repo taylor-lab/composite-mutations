@@ -1,8 +1,13 @@
 ---
-output: pdf_document
+output:
+    html_document:
+        css: style.css
 chunk_output_type: console
 header-includes:
 - \pagenumbering{gobble}
+params:
+    set_title: "Figure-3"
+title: "`r params$set_title`"
 ---
 
 ```{r setup, include = FALSE, echo = FALSE}
@@ -16,7 +21,11 @@ d_phased <- d_phased[!duplicated(id),]
 
 ```
 
+***
+
 \pagebreak
+# Fig 3a
+
 ```{r panel_3a, fig.width=6,fig.height=8}
 
 ## load phased data (using the pairwise-combos)
@@ -117,7 +126,7 @@ p <- ggplot(dat1, aes(x=Class,y=value)) +
     geom_errorbar(aes(min=value,max=upr),color='black',width=0,size=0.5) +
     scale_fill_manual(values=cols,name='Phase') +
     scale_y_continuous(expand=c(0,0),breaks=seq(0,100,by=25),limits=c(0,150)) +
-    labs(x=NULL,y='% phaseable composite mutants',title='Fig 3a') +
+    labs(x=NULL,y='% phaseable composite mutants') +
     theme_std(base_size=14) +
     #annotate(geom = "segment", x=0, xend = 0, y = 0, yend = 100, size=1)+
     theme(legend.position='right',axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) 
@@ -128,7 +137,11 @@ p
 
 ```
 
+***
+
 \pagebreak
+# Fig 3b
+
 ```{r, panel_3b,fig.width=3,fig.height=5}
 
 ## define helper functions here
@@ -301,11 +314,15 @@ p <- ggplot(m, aes(x=group, y=prop, group=phase)) +
     theme_std(base_size=14) +
     theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) + 
     scale_y_continuous(expand=c(0,0),limits=c(0,120),breaks=seq(0,100,by=25)) +
-    labs(x=NULL,y='% composite muts',title='Fig 3b')
+    labs(x=NULL,y='% composite muts')
 p
 ```
 
+***
+
 \pagebreak
+# Fig 3c
+
 ```{r, panel_3c}
 
 plot_phased <- function(res,min_phaseable=3) {
@@ -354,7 +371,7 @@ plot_phased <- function(res,min_phaseable=3) {
         scale_x_discrete(expand=c(0,0)) +
         scale_y_continuous(expand=c(0,0),position='right',breaks=seq(0,1,by=0.2)) +
         scale_fill_manual(values=phase_col) +
-        labs(x=NULL,y='Frac. of phase-able composite mutations',title='Fig 3c') +
+        labs(x=NULL,y='Frac. of phase-able composite mutations') +
         theme_std(base_size=14) +
         theme(axis.text.x=element_text(angle=0,vjust=0,hjust=1))
     p1 <- extract_gglegend(p1)
@@ -408,7 +425,11 @@ p
 
 ```
 
+***
+
 \pagebreak
+# Fig 3d
+
 ```{r, panel_3d, fig.width=8,fig.height=5}
 
 arcplot <- function(gene,dat,labels='',min.n=1) {
@@ -500,7 +521,7 @@ arcplot <- function(gene,dat,labels='',min.n=1) {
     ## make residue Comutation plot
     p <- ggplot(data=dat) +
         theme_classic(base_size=18) +
-        labs(x=NULL,y=NULL,title='Fig 3d') +
+        labs(x=NULL,y=NULL) +
         geom_rect(xmin=xmin, xmax = l, ymin=segment.y, ymax=segment.y.end, fill='#999999') +
         scale_y_continuous(breaks=seq(0,(round(1.25*A)+1),by=2),limits=c(-0.5,1.25*A)) +
         scale_x_continuous(breaks=c(0,100,200,287,300,400),limits=c(0,393))
@@ -608,7 +629,11 @@ p
 
 ```
 
+***
+
 \pagebreak
+# Fig 3f
+
 ```{r, panel_3f, fig.width=6,fig.height=6}
 
 
@@ -701,7 +726,7 @@ tpm <- tpm[,rownames(coldata)]
 
 # Heatmap
 pheatmap(log(tpm),cluster_cols=FALSE,border_color=NA,scale="row",color=colorRampPalette(rev(brewer.pal(n=7,name="RdBu")))(100),
-    cex=0.75,breaks=seq(-1.5,1.5,length=99),show_rownames=F,fontsize=16,angle_col=45,main='Fig 3f')
+    cex=0.75,breaks=seq(-1.5,1.5,length=99),show_rownames=F,fontsize=16,angle_col=45)
 
 ```
 

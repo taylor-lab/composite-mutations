@@ -1,9 +1,15 @@
 ---
-output: pdf_document
+output:
+    html_document:
+        css: style.css
 chunk_output_type: console
 header-includes:
 - \pagenumbering{gobble}
+params:
+    set_title: "Figure-4"
+title: "`r params$set_title`"
 ---
+
 
 ```{r setup, include = FALSE, echo = FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, autodep = knitr::dep_prev())
@@ -19,6 +25,10 @@ d_mutations <- fread(here('data/data_mutations.txt.gz'),select=c('Tumor_Sample_B
 
 ```
 
+***
+
+\pagebreak
+# Fig 4a
 
 ```{r panel_4a, fig.width=8,fig.height=6}
 ## plot colors
@@ -115,12 +125,16 @@ p <- ggplot(dat,aes(x=nlog10q.gene.new,y=nlog10q.residue.new)) +
     scale_color_manual(values=cols,name='Leve of enrichment\n(composites):') +
     theme_classic(base_family='ArialMT',base_size=14) +
     theme(legend.position='bottom') +
-    labs(x='Gene -log10(q-value)',y='Residue -log10(q-value)',title='Fig 4a')
+    labs(x='Gene -log10(q-value)',y='Residue -log10(q-value)')
 p
 
 ```
 
+***
+
 \pagebreak
+# Fig 4b
+
 ```{r, panel_4b, fig.width=6,fig.height=4}
 
 tert <- d_mutations
@@ -174,7 +188,7 @@ p1 <- ggplot(infoM, aes(x=mutation, y=value)) +
     geom_bar(stat='identity',fill='black') +
     scale_y_continuous(breaks=yinfo$breaks,labels=yinfo$labels,limits=yinfo$limits,expand=c(0,0),position='right') +
     theme_std(base_size=14) +
-    labs(x=NULL,y='Number of patients',title='Fig 4b') + 
+    labs(x=NULL,y='Number of patients') + 
     coord_flip()
 p1 <- extract_gglegend(p1)
 
@@ -204,7 +218,11 @@ p
 
 ```
 
+***
+
 \pagebreak
+# Fig 4c
+
 ```{r, panel_4c, fig.width=6,fig.height=4}
 
 all_samples <- d_clinical$Tumor_Sample_Barcode[d_clinical$exclude==F]
@@ -300,12 +318,16 @@ p <- ggplot(mm, aes(x=m2, y=m1)) +
         axis.line.x=element_blank(),
         axis.ticks.y=element_blank(),
         axis.line.y=element_blank()) + 
-    labs(x=NULL, y=NULL, title='Fig 4c') 
+    labs(x=NULL, y=NULL) 
 p
 
 ```
 
+***
+
 \pagebreak
+# Fig 4d
+
 ```{r, panel_4d}
 
 ## load experimental data
@@ -369,7 +391,7 @@ p <- ggplot(d, aes(x=variable, y=mu, ymin=lwr, ymax=upr, fill=line)) +
     theme_std(base_size=14) +
     theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1),axis.line.y=element_blank()) +
     scale_y_continuous(expand=c(0,0), breaks=seq(0,350,by=50),limits=c(0,550)) +
-    labs(x='TERT promoter allele',y='RLU Luciferase',title='Fig 4d') 
+    labs(x='TERT promoter allele',y='RLU Luciferase') 
     for(i in 1:nrow(out2)) p <- p + geom_signif(comparisons=list(c(out2$allele1[i],out2$allele2[i])), y_position = out2$ypos[i] + 5,
                                              annotations=out2$p.anova[i],family='ArialMT',size=0.5,tip_length=0)
 
