@@ -1,16 +1,16 @@
+## exclude these files/filetypes
 *.swp
 *.Rproj*
 *.Rhistory
 *.pdf
+.DS_Store
+.Rproj.user
 
-## development directories
-do
-new
+## exclude development directories
+misc
 pdf/figs
 data/rebuttal_only
 data/toremove
-
-.DS_Store
-.Rproj.user
+data/cancertype_permutation_tests
 
 

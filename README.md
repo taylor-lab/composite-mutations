@@ -1,22 +1,33 @@
 # compound-mutations
 
 Companion code to the paper: \
-**__Pervasive compound oncogenic mutations in cancer__**
+**__Pervasive composite oncogenic mutations in cancer__**
 
 Code in this repository can be used to recreate the essential parts of the main figures in the manuscript. All code is in R (>=3.5.0).
 
 ### Instructions
 Install required R packages from CRAN:
 ```r
+
+
+required.packages <- c('data.table','ggplot2','cowplot','RColorBrewer','parallel','ggsignif','binom','scales','MASS','ggrepel','Hmisc','Rcpp','pheatmap','car','here','magrittr')
+new.packages <- required.packages[!(required.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+
+
 install.packages(c('data.table','ggplot2','cowplot','RColorBrewer',
                    'ggsignif','binom','scales','MASS',
                    'ggrepel','here','Hmisc','pheatmap','car'))
 ```
 Install additional required R packages from Bioconductor:
+
 ```r
-if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
-BiocManager::install(c("DESeq2"))
+if(!'DESeq2' %in% installed.packages()) {
+    if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+    BiocManager::install(c("DESeq2"))
+}
 ```
+
 Download RNA-Seq count file GSE136295_FSR_RNAseq.featureCounts.cnt.csv.gz from [GEO](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE136295) (requires secure token until Aug 23, 2020).
 
 Extract compressed datasets in the `data/` directory:
