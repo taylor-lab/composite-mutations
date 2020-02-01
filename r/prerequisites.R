@@ -147,7 +147,7 @@ adt <- function(d) as.data.table(d)
 
 
 ## prompt the user to enter number of CPUs to use for parallel processing
-## (in some scripts in r/ directory parallelization is advised)
+## (for some scripts in r/ directory parallelization is advised)
 cpu_prompt <- function() {
     cpus_available <- detectCores(all.tests = FALSE, logical = TRUE)
     prompt_text <- paste0('Wait! Parallization is recommended. You have ',cpus_available,' CPUs available. Enter number to use [1-',cpus_available,']: ')
@@ -155,12 +155,10 @@ cpu_prompt <- function() {
     if (interactive() ) {
         input <- readline(prompt_text)
     } else {
-        #  non-interactive
         cat(prompt_text);
         input <- readLines("stdin",n=1);
     }
 
-    #input <- readline(prompt=prompt_text)
     cpus <- as.integer(input)
     if(!is.na(cpus) & cpus>0 & cpus<=cpus_available) {
         message('Proceeding with ',cpus,' CPUs ...')
