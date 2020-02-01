@@ -8,10 +8,14 @@ Code in this repository can be used to recreate the essential parts of the main 
 ### Instructions
 Install required R packages from CRAN and Bioconductor:
 ```r
-required.packages <- c('data.table','ggplot2','cowplot','RColorBrewer','parallel','ggsignif','binom','scales',
-                       'MASS','ggrepel','Hmisc','Rcpp','pheatmap','car','here','magrittr','knitr','rmarkdown')
+## check for missing required packages, install them
+required.packages <- c('data.table','ggplot2','cowplot','RColorBrewer',
+                       'parallel','ggsignif','binom','scales',
+                       'MASS','ggrepel','Hmisc','Rcpp','pheatmap',
+                       'car','here','magrittr','knitr','rmarkdown')
+
 new.packages <- required.packages[!(required.packages %in% installed.packages()[,"Package"])]
-if(length(new.packages)) install.packages(new.packages)
+if(length(new.packages)>0) install.packages(new.packages)
 
 if(!'DESeq2' %in% installed.packages()) {
     if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
