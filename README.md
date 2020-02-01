@@ -17,6 +17,7 @@ required.packages <- c('data.table','ggplot2','cowplot','RColorBrewer',
 new.packages <- required.packages[!(required.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)>0) install.packages(new.packages)
 
+## install DESeq2 from Bioconductor if not installed
 if(!'DESeq2' %in% installed.packages()) {
     if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
     BiocManager::install(c("DESeq2"))
