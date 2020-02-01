@@ -1,7 +1,13 @@
 ---
-title: "Compound-mutations: Values from data referenced in text"
-output: html_document
+output:
+    html_document:
+        css: style.css
 chunk_output_type: console
+header-includes:
+- \pagenumbering{gobble}
+params:
+    set_title: "Values from text"
+title: "`r params$set_title`"
 ---
 
 ```{r setup, include=F, echo=T}
@@ -9,18 +15,18 @@ knitr::opts_chunk$set(echo = F, message = F, warning = FALSE, autodep = knitr::d
 
 ## source prerequisites (libraries, functions, variables)
 source(here::here('r/prerequisites.R'))
-d_clinical <- fread(here('data/data_clinical.txt'))
+d_clinical <- fread(here('data/data_clinical.txt.gz'))
 
 
 ## load starting datasets
-d_mutations <- fread(here('data/data_mutations.txt'),select=c('Tumor_Sample_Barcode','exclude','Hugo_Symbol','Role','putative_resistance_mutation',
+d_mutations <- fread(here('data/data_mutations.txt.gz'),select=c('Tumor_Sample_Barcode','exclude','Hugo_Symbol','Role','putative_resistance_mutation',
                                                               'Variant_Classification','Variant_Type','tcn', 'mutationid', 'high_tmb','hotspot_class',
                                                               'tm','hotspotid','HGVSp_Short','truncating','Reference_Allele','Tumor_Seq_Allele2',
                                                               'Start_Position','End_Position'))
-d_clinical_tcga <- fread(here('data/data_clinical_tcga.txt'))
-d_mutations_tcga <- fread(here('data/data_mutations_tcga.txt'),select=c('Tumor_Sample_Barcode','Hugo_Symbol'))
+d_clinical_tcga <- fread(here('data/data_clinical_tcga.txt.gz'))
+d_mutations_tcga <- fread(here('data/data_mutations_tcga.txt.gz'),select=c('Tumor_Sample_Barcode','Hugo_Symbol'))
 gene_info <- fread(here('data/gene_info.txt'))
-d_phased <- fread(here('data/data_mutations_phased.txt')) 
+d_phased <- fread(here('data/data_mutations_phased.txt.gz')) 
 
 ## exclude duplicates from phasing data
 d_phased$id <- paste(d_phased$mutationid.1,d_phased$mutationid.2,sep=' + ')
@@ -35,19 +41,19 @@ d_phased <- d_phased[!duplicated(id),]
 length(unique(strtrim(d_clinical$Tumor_Sample_Barcode,9)))
 ```
 
-#### Percentage of tumors harboring a compound mutation in an IMPACT gene:
+#### Percentage of tumors harboring a composite mutation in an IMPACT gene:
 
 ```{r, echo=T}
 n_samples <- length(unique(d_clinical$Tumor_Sample_Barcode))
-check_compounds_per_sample <- function(d) {
-    any_compound <- any(duplicated(d$Hugo_Symbol))
-    list(any_compound=any_compound)
+check_composites_per_sample <- function(d) {
+    any_composite <- any(duplicated(d$Hugo_Symbol))
+    list(any_composite=any_composite)
 }
-result <- d_mutations[,check_compounds_per_sample(.SD),by=Tumor_Sample_Barcode]
-samples_with_compounds <- result$Tumor_Sample_Barcode[result$any_compound==T]
-n_samples_with_compounds <- length(unique(samples_with_compounds))
-fraction_samples_with_compounds <- n_samples_with_compounds / n_samples
-round(100*fraction_samples_with_compounds,3)
+result <- d_mutations[,check_composites_per_sample(.SD),by=Tumor_Sample_Barcode]
+samples_with_composites <- result$Tumor_Sample_Barcode[result$any_composite==T]
+n_samples_with_composites <- length(unique(samples_with_composites))
+fraction_samples_with_composites <- n_samples_with_composites / n_samples
+round(100*fraction_samples_with_composites,3)
 ```
 
 ### Paragraph 2
@@ -62,28 +68,28 @@ length(unique(d_clinical$metamaintype))
 n_samples
 ```
 
-#### Number of tumor specimens harboring any compound mutations
+#### Number of tumor specimens harboring any composite mutations
 ```{r, echo=T}
-n_samples_with_compounds
+n_samples_with_composites
 ```
 
-#### Expected percentage of tumor specimens harboring any compound mutations by chance
+#### Expected percentage of tumor specimens harboring any composite mutations by chance
 ```{r, echo=T}
-## load the percent of compounds across all samples after each of 100,000 random permutations
-## the average is the expected percentage of compound mutations by chance
-l <- readRDS(here('data/observed_vs_expected_compounds_impact.rds'))
+## load the percent of composites across all samples after each of 100,000 random permutations
+## the average is the expected percentage of composite mutations by chance
+l <- readRDS(here('data/observed_vs_expected_composites_impact_precalculated.rds'))
 average_expected <- mean(l$dat_all$prop)
 average_expected
 ```
 
-#### Percent increase of observed to expected rate of compound-mutated samples in data
+#### Percent increase of observed to expected rate of composite-mutated samples in data
 ```{r, echo=T}
-round(100*(fraction_samples_with_compounds / average_expected - 1),3)
+round(100*(fraction_samples_with_composites / average_expected - 1),3)
 ```
 
-#### Mutation burdens with enriched compound mutations
+#### Mutation burdens with enriched composite mutations
 ```{r,echo=T}
-l <- readRDS(here('data/observed_vs_expected_compounds_per_tmb_impact.rds'))
+l <- readRDS(here('data/observed_vs_expected_composites_per_tmb_impact_precalculated.rds'))
 get_p <- function(x) {
     pvalue <- x$p
     tmb <- x$burden
@@ -99,16 +105,16 @@ x <- sum(round(d_clinical$tmb) %in% 4:12)
 round(100*(x/n_samples),3)
 ```
 
-#### Percetange of low TMB tumors with any compounds
+#### Percetange of low TMB tumors with any composites
 ```{r, echo=T}
 low_tmb_samples <- d_clinical$Tumor_Sample_Barcode[round(d_clinical$tmb) == 4]
-low_tmb_samples_with_compound <- samples_with_compounds[samples_with_compounds %in% low_tmb_samples]
-round(100*length(unique(low_tmb_samples_with_compound)) / length(unique(low_tmb_samples)))
+low_tmb_samples_with_composite <- samples_with_composites[samples_with_composites %in% low_tmb_samples]
+round(100*length(unique(low_tmb_samples_with_composite)) / length(unique(low_tmb_samples)))
 ```
 
 ### Paragraph 3
 
-#### Percentage of compound-mutant cases that could be ascribed to known phenomena
+#### Percentage of composite-mutant cases that could be ascribed to known phenomena
 
 ```{r, echo=T}
 ## categorize all samples in clinical data (including those with 0 mutations in MAF) according to cause of hypermutation or non-hypermutated
@@ -133,32 +139,32 @@ tmp$group <- factor(tmp$group,levels=unique(tmp$group))
 tmp <- tmp[order(sample,group),]
 tmp <- tmp[!duplicated(sample),]
 
-## annotate each sample/gene combo as compound, resistance, or probable biallelic loss
+## annotate each sample/gene combo as composite, resistance, or probable biallelic loss
 summarize_sample_gene <- function(d) {
-    compound <- nrow(d) > 1
-    any_resistance <- any(d$putative_resistance_mutation,na.rm=T) & compound==T
+    composite <- nrow(d) > 1
+    any_resistance <- any(d$putative_resistance_mutation,na.rm=T) & composite==T
     if(d$Role[1] %in% c('TSG','Oncogene/TSG') & sum(d$Variant_Classification %in% c('Nonsense_Mutation','Splice_Site','Frame_Shift_Del','Frame_Shift_Ins')) > 1) {
         prob_biallelic_loss_of_tsg <- T
     } else {
         prob_biallelic_loss_of_tsg <- F
     }
 
-    list(compound=compound,any_resistance=any_resistance,prob_biallelic_loss_of_tsg=prob_biallelic_loss_of_tsg)
+    list(composite=composite,any_resistance=any_resistance,prob_biallelic_loss_of_tsg=prob_biallelic_loss_of_tsg)
 }
 info <- d_mutations[,summarize_sample_gene(.SD),by=c('Tumor_Sample_Barcode','Hugo_Symbol')]
 info2 <- merge(info, tmp, by.x='Tumor_Sample_Barcode', by.y='sample', all=T)
-info2[is.na(compound),compound:=F]
+info2[is.na(composite),composite:=F]
 info2[is.na(any_resistance),any_resistance:=F]
 info2[is.na(prob_biallelic_loss_of_tsg),prob_biallelic_loss_of_tsg:=F]
 
-## summarize each sample for any compound mutations and their possible mechanisms
+## summarize each sample for any composite mutations and their possible mechanisms
 summarize_sample <- function(d) {
-    any.compound <- any(d$compound)
+    any.composite <- any(d$composite)
     any.resistance <- any(d$any_resistance)
-    if(any.compound==F) {
+    if(any.composite==F) {
         reason <- 'n/a'
     } else {
-        reason <- 'Unexplained compound mutation'
+        reason <- 'Unexplained composite mutation'
         if(d$group[1]!='Normal-TMB') {
             reason <- as.character(d$group[1])
         } else if(any.resistance) {
@@ -167,16 +173,16 @@ summarize_sample <- function(d) {
             reason <- 'Probably biallelic-loss of TSG'
         }
     }
-    list(any.compound=any.compound, reason=reason)
+    list(any.composite=any.composite, reason=reason)
 }
 sample_result <- info2[,summarize_sample(.SD),by=Tumor_Sample_Barcode]
 sample_result <- sample_result[reason!='n/a']
 
-## % of compound-mutant cases that could be ascribed to known phenomena
-round(100*sum(sample_result$reason!='Unexplained compound mutation') / nrow(sample_result),3)
+## % of composite-mutant cases that could be ascribed to known phenomena
+round(100*sum(sample_result$reason!='Unexplained composite mutation') / nrow(sample_result),3)
 ```
 
-#### Percentage of compound-mutant cases attributable to resistance mutations
+#### Percentage of composite-mutant cases attributable to resistance mutations
 ```{r, echo=T}
 round(100*sum(sample_result$reason=='Known resistance mutation') / nrow(sample_result),3)
 ```  
@@ -187,55 +193,55 @@ n_samples_tcga <- length(unique(d_clinical_tcga$Tumor_Sample_Barcode))
 n_samples_tcga
 ```
 
-#### Percentage of TCGA samples with any compound mutations in an IMPACT gene
+#### Percentage of TCGA samples with any composite mutations in an IMPACT gene
 ```{r, echo=T}
 summarize_sample <- function(d) {
     tbl0 <- table.freq(d$Hugo_Symbol)
-    any_compound <- any(tbl0$N > 1)
-    list(any_compound=any_compound)
+    any_composite <- any(tbl0$N > 1)
+    list(any_composite=any_composite)
 }
 
 impact_genes <- gene_info$Hugo_Symbol
 result <- d_mutations_tcga[Hugo_Symbol %in% impact_genes,summarize_sample(.SD),by=Tumor_Sample_Barcode]
-n_samples_with_compounds_tcga <- sum(result$any_compound)
-round(100*(n_samples_with_compounds_tcga / n_samples_tcga),3)
+n_samples_with_composites_tcga <- sum(result$any_composite)
+round(100*(n_samples_with_composites_tcga / n_samples_tcga),3)
 ```
 
-#### Percentage of compound-mutant cases attributable to putative biallelic-loss of TSGs
+#### Percentage of composite-mutant cases attributable to putative biallelic-loss of TSGs
 ```{r, echo=T}
 round(100*sum(sample_result$reason=='Probably biallelic-loss of TSG') / nrow(sample_result),3)
 ```  
 
 
-#### Percentage of mutations in oncogenes and TSGs that are compound-mutants
+#### Percentage of mutations in oncogenes and TSGs that are composite-mutants
 ```{r, echo=T}
 d <- d_mutations[exclude==F & putative_resistance_mutation==F,]
 d$id <- paste(d$Tumor_Sample_Barcode,d$Hugo_Symbol)
 tbl <- table.freq(d$id)
-tbl$compound <- tbl$N > 1
+tbl$composite <- tbl$N > 1
 tbl[,N:=NULL]
 d <- merge(d, tbl, by.x='id', by.y='value', all.x=T)
 
-## Percentage of oncogene-mutant samples with a compound mutation
+## Percentage of oncogene-mutant samples with a composite mutation
 d_onc <- d[Role=='Oncogene',]
 n_samples_onc <- length(unique(strtrim(d_onc$Tumor_Sample_Barcode,9)))
-n_compound_onc <- length(unique(strtrim(d_onc$Tumor_Sample_Barcode[d_onc$compound==T],9)))
-round(100*n_compound_onc/n_samples_onc,3)
+n_composite_onc <- length(unique(strtrim(d_onc$Tumor_Sample_Barcode[d_onc$composite==T],9)))
+round(100*n_composite_onc/n_samples_onc,3)
 
-## tabulate fraction of tsg-mutant samples with a compound mutation
+## tabulate fraction of tsg-mutant samples with a composite mutation
 d_tsg <- d[Role=='TSG',]
 n_samples_tsg <- length(unique(strtrim(d_tsg$Tumor_Sample_Barcode,9)))
-n_compound_tsg <- length(unique(strtrim(d_tsg$Tumor_Sample_Barcode[d_tsg$compound==T],9)))
-round(100*n_compound_tsg/n_samples_tsg,3)
+n_composite_tsg <- length(unique(strtrim(d_tsg$Tumor_Sample_Barcode[d_tsg$composite==T],9)))
+round(100*n_composite_tsg/n_samples_tsg,3)
 
 ## p-value based on two-sample Z test 
-tst <- prop.test(c(n_compound_onc,n_compound_tsg),c(n_samples_onc,n_samples_tsg))
+tst <- prop.test(c(n_composite_onc,n_composite_tsg),c(n_samples_onc,n_samples_tsg))
 pval <- tst$p.value
 pval
 ```
 
 
-#### Percentage of compound mutations in TSGs or Oncogenes with 1+ truncating variants vs only missense
+#### Percentage of composite mutations in TSGs or Oncogenes with 1+ truncating variants vs only missense
 ```{r, echo=T}
 
 ## load phased data with pairwise-mutation comparison
@@ -249,14 +255,14 @@ d[(truncating.1==T & truncating.2==F | truncating.1==F & truncating.2==T),Class:
 d[truncating.1==T & truncating.2==T,Class:='Truncating/Truncating']
 d <- d[Role %in% c('Oncogene','TSG'),]
 
-## don't overcount 3+ mutation compound-mutations by using unique sample/gene/Class counts
+## don't overcount 3+ mutation composite-mutations by using unique sample/gene/Class counts
 d$id <- paste(d$Tumor_Sample_Barcode, d$Hugo_Symbol, d$Class)
 d <- d[!duplicated(id),c('Tumor_Sample_Barcode','Hugo_Symbol','Class','Role','id'),with=F]
 dd <- d
 dd[Class!='Non-truncating/Non-truncating',Class:='1 or both are truncating']
 dd$Class <- factor(dd$Class,levels=(c('Non-truncating/Non-truncating','1 or both are truncating')))
 
-## for each gene, get its singleton/compound counts
+## for each gene, get its singleton/composite counts
 summarize_gene <- function(d) {
     n_missense_missense <- length(unique(strtrim(d$Tumor_Sample_Barcode[d$Class=='Non-truncating/Non-truncating'],9)))
     n_any_truncating <- length(unique(strtrim(d$Tumor_Sample_Barcode[d$Class=='1 or both are truncating'],9)))
@@ -271,12 +277,12 @@ round(100*(m / rowSums(m)),3)
 
 #### Percentage of all affected cases that could not be ascribed to a known mutational mechanism or origin
 ```{r, echo=T}
-round(100*sum(sample_result$reason=='Unexplained compound mutation') / nrow(sample_result),3)
+round(100*sum(sample_result$reason=='Unexplained composite mutation') / nrow(sample_result),3)
 ```
 
 ### Paragraph 4
 
-#### Genes significantly enriched for compound mutations
+#### Genes significantly enriched for composite mutations
 
 ```{r, echo=T}
 d <- d_mutations
@@ -289,41 +295,41 @@ d[tert_promoter, Hugo_Symbol:='TERT promoter']
 d[tert_promoter, cds_length:=499] ## this is the length of the promoter region of TERT covered by IMPACT468
 d[tert_promoter, percentage_gene_gc_content:=0.7896] ## this is the %GC content of TERT promoter region
 
-## get observed number of compound mutated samples and mutated samples per gene
-get_compound_rate_per_gene <- function(d) {
+## get observed number of composite mutated samples and mutated samples per gene
+get_composite_rate_per_gene <- function(d) {
     tbl <- table.freq(d$Tumor_Sample_Barcode)
     samples <- tbl$value
-    compound_samples <- tbl$value[tbl$N > 1]
+    composite_samples <- tbl$value[tbl$N > 1]
     singleton_samples <- tbl$value[tbl$N == 1]
 
     ## don't overcount multiple samples per patient
     samples <- length(unique(strtrim(samples, 9)))
-    compounds <- length(unique(strtrim(compound_samples, 9)))
+    composites <- length(unique(strtrim(composite_samples, 9)))
     singletons <- length(unique(strtrim(singleton_samples, 9)))
     tcn <- mean(d$tcn,na.rm=T) 
 
-    list(singletons=singletons,compounds=compounds,samples=samples,tcn=tcn,
+    list(singletons=singletons,composites=composites,samples=samples,tcn=tcn,
          reptime=unique(d$reptime),percentage_gene_gc_content=unique(d$percentage_gene_gc_content),cds_length=unique(d$cds_length),
          panel_introduced=unique(d$panel_introduced))
 }
-res <- d[,get_compound_rate_per_gene(.SD),by=Hugo_Symbol]
+res <- d[,get_composite_rate_per_gene(.SD),by=Hugo_Symbol]
 res$panel_introduced <- factor(res$panel_introduced)
 res$Hugo_Symbol <- gsub('-','_',res$Hugo_Symbol)
 res$Hugo_Symbol <- gsub(' ','_',res$Hugo_Symbol)
 
-## use negative-binomial regression to model the predicted number of compound-mutant samples per gene by chance
-m <- glm.nb(compounds ~ offset(log(samples)) + reptime + cds_length + percentage_gene_gc_content + panel_introduced + tcn, data=res)
+## use negative-binomial regression to model the predicted number of composite-mutant samples per gene by chance
+m <- glm.nb(composites ~ offset(log(samples)) + reptime + cds_length + percentage_gene_gc_content + panel_introduced + tcn, data=res)
 predictions <- predict(m,newdata=res,type='response')
 res$predicted_proportion <- predictions / res$samples
-res$observed_proportion <- res$compounds / res$samples
-dat <- res[,c('Hugo_Symbol','compounds','samples','predicted_proportion','observed_proportion'),with=F]
+res$observed_proportion <- res$composites / res$samples
+dat <- res[,c('Hugo_Symbol','composites','samples','predicted_proportion','observed_proportion'),with=F]
 
-## test each gene for enriched or depleted compound mutant samples
+## test each gene for enriched or depleted composite mutant samples
 test_gene <-function(dat) {
     x <- tryCatch({
-        tst <- binom.test(dat$compounds,dat$samples,dat$predicted_proportion,alternative='greater')
+        tst <- binom.test(dat$composites,dat$samples,dat$predicted_proportion,alternative='greater')
         p_enriched <- tst$p.value
-        tst2 <- binom.test(dat$compounds,dat$samples,dat$predicted_proportion,alternative='two.sided')
+        tst2 <- binom.test(dat$composites,dat$samples,dat$predicted_proportion,alternative='two.sided')
         p_twosided <- tst2$p.value
         list(p_enriched=p_enriched, p_twosided=p_twosided)
     },error=function(e) {
@@ -342,32 +348,32 @@ dat <- dat[order(p_enriched,decreasing=F),]
 dat$q_enriched <- p.adjust(dat$p_enriched,method='BH')
 dat$q_twosided <- p.adjust(dat$p_twosided,method='BH')
 
-## genes with significant enrichment for compound mutations 
-dat_genes_enriched_for_compounds <- dat[q_enriched < 0.01,c('Hugo_Symbol','Role','q_enriched'),with=F]
-dat_genes_enriched_for_compounds
+## genes with significant enrichment for composite mutations 
+dat_genes_enriched_for_composites <- dat[q_enriched < 0.01,c('Hugo_Symbol','Role','q_enriched'),with=F]
+dat_genes_enriched_for_composites
 ```
 
-#### Percentage of PIK3CA mutations that are compound mutations
+#### Percentage of PIK3CA mutations that are composite mutations
 ```{r, echo=T}
-## % of all pik3ca mutations that are compounds
+## % of all pik3ca mutations that are composites
 x <- d_mutations[exclude==F & Hugo_Symbol=='PIK3CA',c('Tumor_Sample_Barcode','Hugo_Symbol'),with=F]
 tbl <- table.freq(x$Tumor_Sample_Barcode)
 samples_overall <- length(unique(strtrim(tbl$value,9)))
-compounds <- length(unique(strtrim(tbl$value[tbl$N > 1],9)))
-ci <- binom.confint(compounds, samples_overall, method='exact')
+composites <- length(unique(strtrim(tbl$value[tbl$N > 1],9)))
+ci <- binom.confint(composites, samples_overall, method='exact')
 out <- adt(ci[,c('mean','lower','upper')])
 out <- 100*out
 names(out) <- c('Percentage','95%CI (lower)','95%CI (upper)')
 out
 ``` 
 
-#### Genes depleted for compound mutations
+#### Genes depleted for composite mutations
 ```{r, echo=T}
-dat_genes_depleted_for_compounds <- dat[q_twosided < 0.01 & logOR < 0,c('Hugo_Symbol','Role','q_twosided','logOR'),with=F]
-dat_genes_depleted_for_compounds
+dat_genes_depleted_for_composites <- dat[q_twosided < 0.01 & logOR < 0,c('Hugo_Symbol','Role','q_twosided','logOR'),with=F]
+dat_genes_depleted_for_composites
 ```
 
-#### IDH1 is depleted for compound mutations
+#### IDH1 is depleted for composite mutations
 ```{r, echo=T}
 dat[Hugo_Symbol=='IDH1',c('Hugo_Symbol','Role','q_twosided','logOR'),with=F]
 ```
@@ -375,7 +381,7 @@ dat[Hugo_Symbol=='IDH1',c('Hugo_Symbol','Role','q_twosided','logOR'),with=F]
 
 ### Paragraph 5
 
-#### How many times more likely are compound mutations to include hotspots than singleton mutations?
+#### How many times more likely are composite mutations to include hotspots than singleton mutations?
 ```{r, echo=T}
 
 ## load MAF, subset for hotspot SNPs among valid samples
@@ -385,34 +391,34 @@ dd <- d[Variant_Classification %in% 'Missense_Mutation',]
 dd[hotspot_class=='3d',hotspot:=F]
 dd[hotspot_class=='3d',hotspot_class:='']
 
-## annotate if the sample-gene is singleton or compound
+## annotate if the sample-gene is singleton or composite
 dd$id <- paste(dd$Tumor_Sample_Barcode,dd$Hugo_Symbol)
 tbl <- table.freq(dd$id)
 singleton <- tbl$value[tbl$N==1]
-compound <- tbl$value[tbl$N>1]
-dd$compound <- dd$id %in% compound
+composite <- tbl$value[tbl$N>1]
+dd$composite <- dd$id %in% composite
 dd$PATIENT_ID <- strtrim(dd$Tumor_Sample_Barcode,9)
 dd$pid_gene <- paste(dd$PATIENT_ID,dd$Hugo_Symbol)
-total_number_singleton_mutations <- length(unique(dd$pid_gene[dd$compound==F]))
-total_number_compound_mutations <- length(unique(dd$pid_gene[dd$compound==T]))
+total_number_singleton_mutations <- length(unique(dd$pid_gene[dd$composite==F]))
+total_number_composite_mutations <- length(unique(dd$pid_gene[dd$composite==T]))
 total_number_mutations <- length(unique(dd$pid_gene))
 
-## for each hotspot, count the numnber of mutant, singleton and compound samples
+## for each hotspot, count the numnber of mutant, singleton and composite samples
 summarize_individual_hotspot <- function(d) {
-    ## count affected singleton/compound samples
+    ## count affected singleton/composite samples
     mutant_samples <- sortunique(d$Tumor_Sample_Barcode)
-    singleton_samples <- sortunique(d$Tumor_Sample_Barcode[d$compound==F])
-    compound_samples <- sortunique(d$Tumor_Sample_Barcode[d$compound==T])
+    singleton_samples <- sortunique(d$Tumor_Sample_Barcode[d$composite==F])
+    composite_samples <- sortunique(d$Tumor_Sample_Barcode[d$composite==T])
 
     ## don't overcount patients with 2+ samples
     mutant_samples <- unique(strtrim(mutant_samples,9))
     singleton_samples <- unique(strtrim(singleton_samples,9))
-    compound_samples <- unique(strtrim(compound_samples,9))
+    composite_samples <- unique(strtrim(composite_samples,9))
 
     n.mutant <- length(mutant_samples)
     n.singletons <- length(singleton_samples)
-    n.compounds <- length(compound_samples)
-    list(n.mutant=n.mutant,n.singletons=n.singletons,n.compounds=n.compounds)
+    n.composites <- length(composite_samples)
+    list(n.mutant=n.mutant,n.singletons=n.singletons,n.composites=n.composites)
 }
 
 hotspots <- sortunique(dd$hotspotid)
@@ -421,48 +427,48 @@ ll <- dd[hotspotid!='',summarize_individual_hotspot(.SD),by=hotspotid]
 ll <- ll[order(n.mutant,decreasing=T),]
 ll$x.order <- 1:nrow(ll)
 ll$p.singletons <- cumsum(ll$n.singletons / total_number_singleton_mutations)
-ll$p.compounds <- cumsum(ll$n.compounds / total_number_compound_mutations)
+ll$p.composites <- cumsum(ll$n.composites / total_number_composite_mutations)
 ll$p.mutant <- cumsum(ll$n.mutant / total_number_mutations)
 
-overall_prob_compound_mutation_has_hotspot <- max(ll$p.compounds)
+overall_prob_composite_mutation_has_hotspot <- max(ll$p.composites)
 overall_prob_singleton_mutation_has_hotspot <- max(ll$p.singleton)
-overall_prob_compound_mutation_has_hotspot / overall_prob_singleton_mutation_has_hotspot
+overall_prob_composite_mutation_has_hotspot / overall_prob_singleton_mutation_has_hotspot
 
 ## Calculate P-value:
 singletons_summary <- data.table(x=sum(ll$n.singletons),n=total_number_singleton_mutations,class='Singletons')
-compounds_summary <- data.table(x=sum(ll$n.compounds),n=total_number_compound_mutations,class='Compound mutations')
-summary <- rbind(singletons_summary, compounds_summary)
+composites_summary <- data.table(x=sum(ll$n.composites),n=total_number_composite_mutations,class='Composite mutations')
+summary <- rbind(singletons_summary, composites_summary)
 prop.test(summary$x, summary$n)$p.value
 ```
 
 #### Percentage of singleton missense mutations that are hotspots
 ```{r, echo=T}
-singletons <- dd[compound==F & Variant_Classification=='Missense_Mutation',]
+singletons <- dd[composite==F & Variant_Classification=='Missense_Mutation',]
 singleton_hotspots <- sum(singletons$hotspot_class %in% c('24k','24k+3d'))
 n_singletons <- nrow(singletons)
 singleton_hotspots/n_singletons
 ```
 
-#### Percentage of missense mutations in compounds that are hotspots
+#### Percentage of missense mutations in composites that are hotspots
 ```{r, echo=T}
-compounds <- dd[compound==T & Variant_Classification=='Missense_Mutation',]
-compound_hotspots <- sum(compounds$hotspot_class %in% c('24k','24k+3d'))
-n_compounds <- nrow(compounds)
-compound_hotspots/n_compounds
+composites <- dd[composite==T & Variant_Classification=='Missense_Mutation',]
+composite_hotspots <- sum(composites$hotspot_class %in% c('24k','24k+3d'))
+n_composites <- nrow(composites)
+composite_hotspots/n_composites
 ```
 
-#### P-value for difference in proportion of hotspots in compounds vs singletons
+#### P-value for difference in proportion of hotspots in composites vs singletons
 ```{r, echo=T}
-tbl_compound <- table(compounds$hotspotid!='')
+tbl_composite <- table(composites$hotspotid!='')
 tbl_singleton <- table(singletons$hotspotid!='')
-x <- c(tbl_compound[['TRUE']], tbl_singleton[['TRUE']])
-n <- c(nrow(compounds),nrow(singletons))
+x <- c(tbl_composite[['TRUE']], tbl_singleton[['TRUE']])
+n <- c(nrow(composites),nrow(singletons))
 pval <- prop.test(x,n,alternative='two.sided')$p.value
 pval
 ```
 
 
-#### Percentage of compound mutations per gene role where more-prevalent allele is mutated first
+#### Percentage of composite mutations per gene role where more-prevalent allele is mutated first
 ```{r, echo=T}
 
 ## load phasing data
@@ -535,7 +541,7 @@ dd2$secondallele <- as.character(dd2$secondallele)
 dat <- dd2
 
 ## get the prop of 1st more prevalent vs 2nd more prevalent vs gene role
-dat <- dat[same_cell_known==T | phase=='cis',] ## only consider compounds definitely in same cell
+dat <- dat[same_cell_known==T | phase=='cis',] ## only consider composites definitely in same cell
 dat$n_functional <- dat$functional.1 + dat$functional.2
 dat <- dat[n_functional > 0,]
 dat$n_functional <- paste0('functional_',dat$n_functional)
@@ -556,25 +562,25 @@ out <- propdata[,c('role','prop_first','lower','upper'),with=F]
 out[,2:4] <- 100*out[,(2:4),with=F]
 names(out) <- c('Role','% more prevalent mutated first','95%CI (lower','95%CI (upper)')
 
-## Percentage of compound mutations per gene role where more-prevalent allele is mutated first
+## Percentage of composite mutations per gene role where more-prevalent allele is mutated first
 out
 ```
 
 
 ### Paragraph 6
 
-#### Tabulate phase-able compound mutations
+#### Tabulate phase-able composite mutations
 ```{r, echo=T}
 d <- d_phased[exclude==F & !is.na(phase) & phase!='unknown',]
 
-## count compound mutations with 3+ mutations of the same phase only once
+## count composite mutations with 3+ mutations of the same phase only once
 d$id <- paste(d$Tumor_Sample_Barcode,d$Hugo_Symbol,d$phase)
 d <- d[!duplicated(id),]
 
-## number of evaluable compound mutations
+## number of evaluable composite mutations
 nrow(d)
 
-## tabulate compounds with different phasing outcomes
+## tabulate composites with different phasing outcomes
 d[phase %in% c('trans or separate cells','ambiguous: 3+ cis, 3+ trans'),phase:='ambiguous']
 tbl <- table.freq(d$phase)
 tbl$Percentage <- round(100*(tbl$N / sum(tbl$N)),3)
@@ -597,7 +603,7 @@ d[truncating.1==F & truncating.2==F,Class:='Non-truncating/Non-truncating']
 d[(truncating.1==T & truncating.2==F | truncating.1==F & truncating.2==T),Class:='Non-truncating/Truncating']
 d[truncating.1==T & truncating.2==T,Class:='Truncating/Truncating']
 
-## don't overcount 3+ mutation compound-mutations; using unique sample/gene/Class counts
+## don't overcount 3+ mutation composite-mutations; using unique sample/gene/Class counts
 d$id <- paste(d$Tumor_Sample_Barcode, d$Hugo_Symbol, d$Class, d$phase)
 dd <- d
 dd <- dd[!duplicated(id),c('Tumor_Sample_Barcode','Hugo_Symbol','Class','Role','phase','id'),with=F]
@@ -625,14 +631,14 @@ fisher.test(m,alternative='two.sided')$p.value
 ```
 
 
-#### P-value for significance of 100% resistance mutation compounds in cis vs non-resistance
+#### P-value for significance of 100% resistance mutation composites in cis vs non-resistance
 ```{r, echo=T}
 
-## here we will find compound mutations associated with resistance, tabulate their incidence in cis and trans, and compare this to the cis/trans frequencies for compounds not including resistance mutations.
-## NB: Phased inferred from LOH was used in the figure panel "Fraction of phase-able compound mutations" per gene, but not to calculate P-value for difference with non-resistance compounds, as this inferrential phasing was not generally done for them.
+## here we will find composite mutations associated with resistance, tabulate their incidence in cis and trans, and compare this to the cis/trans frequencies for composites not including resistance mutations.
+## NB: Phased inferred from LOH was used in the figure panel "Fraction of phase-able composite mutations" per gene, but not to calculate P-value for difference with non-resistance composites, as this inferrential phasing was not generally done for them.
 
 ## define helper functions here
-label_compound <- function(d) {
+label_composite <- function(d) {
     label <- ''
     if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='Exon 19 INDELs' & d$HGVSp_Short.2=='T790M'))  label <- 'EGFR Exon 19 INDELs + T790M'
     if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='T790M' & d$HGVSp_Short.2=='L858R'))  label <- 'EGFR L858R + T790M'
@@ -656,7 +662,7 @@ label_compound <- function(d) {
 }
 
 extract_cis_trans <- function(d) {
-    ## don't overcount multiple pairs of compound mutations in the same sample+gene+phase
+    ## don't overcount multiple pairs of composite mutations in the same sample+gene+phase
     d$id <- paste(d$Tumor_Sample_Barcode,d$Hugo_Symbol,d$phase)
     d <- d[!duplicated(id),c('Tumor_Sample_Barcode','metamaintype','Hugo_Symbol','Role','phase','id',
                              'putative_resistance_mutation.1','putative_resistance_mutation.2',
@@ -667,7 +673,7 @@ extract_cis_trans <- function(d) {
     d
 }
 
-summarize_compound_with_alleles <- function(d) {
+summarize_composite_with_alleles <- function(d) {
     n <- length(unique(strtrim(d$Tumor_Sample_Barcode,9)))
     list(n=n)
 }
@@ -684,11 +690,11 @@ d <- merge(d, reviewed[,c('Tumor_Sample_Barcode','Hugo_Symbol','HGVSp_Short.1','
            by=c('Tumor_Sample_Barcode','Hugo_Symbol','HGVSp_Short.1','HGVSp_Short.2'),all.x=T)
 d[phase_reviewed %in% c('cis','cis*'),phase:=phase_reviewed]
 
-## exclude these compound mutations for stated reasons
+## exclude these composite mutations for stated reasons
 to_remove <- c(
                ## bad facets fit in this sample, we can't be sure variants are in the same cell: exclude
                which(d$Tumor_Sample_Barcode=='P-0013110-T01-IM5' & d$tm.1=='KIT C809' & d$tm.2=='KIT indel:820-821'),
-               ## this sample has EGFR S768 cis with EGFR T790, but both are in trans with a passenger C775, so I am removing the passenger compound
+               ## this sample has EGFR S768 cis with EGFR T790, but both are in trans with a passenger C775, so I am removing the passenger composite
                which(d$Tumor_Sample_Barcode=='P-0003923-T01-IM5' & d$tm.1=='EGFR C775' & d$tm.2=='EGFR T790'),
                which(d$Tumor_Sample_Barcode=='P-0003923-T01-IM5' & d$tm.1=='EGFR S768' & d$tm.2=='EGFR C775'))
 d <- d[-to_remove,]
@@ -704,7 +710,7 @@ d[Variant_Classification.1 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol==
 d[Variant_Classification.2 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol=='KIT' & Exon_Number.2=='11/21',HGVSp_Short.2:=paste('Exon 11 INDELs')]
 d <- d[phase %in% c('cis','cis*','trans'),]
 
-## don't overcount compounds within each sample/gene/alleles/phase combination (redoing after the above label collapsing in last step)
+## don't overcount composites within each sample/gene/alleles/phase combination (redoing after the above label collapsing in last step)
 d$id <- paste(strtrim(d$Tumor_Sample_Barcode,9),d$Hugo_Symbol,d$HGVSp_Short.1,d$HGVSp_Short.2,d$phase)
 d <- d[!duplicated(id),]
 
@@ -712,7 +718,7 @@ d <- d[!duplicated(id),]
 dd <- extract_cis_trans(d)
 dd <- dd[order(Tumor_Sample_Barcode,Hugo_Symbol),]
 dd$i <- 1:nrow(dd)
-dd <- dd[,label_compound(.SD),by=i]
+dd <- dd[,label_composite(.SD),by=i]
 
 ## these samples have bona fide EGFR resistance mutation with 2+ other EGFR mutations, but the resistance mutation was not phaseable with any, so exclude them
 toremove <- which(dd$Hugo_Symbol=='EGFR' & (grepl('T790M',dd$label)==F & grepl('C797S',dd$label)==F))
@@ -721,8 +727,8 @@ dd <- dd[-toremove,]
 ## Exclude ESR1 resistance mutations because ESR1 there is no initial ESR1 drug target
 dd <- dd[Hugo_Symbol!='ESR1',]
 
-## get final tabulation of phaseable compound mutations associated with therapeutic resistance
-info <- dd[,summarize_compound_with_alleles(.SD),by=c('Hugo_Symbol','label','phase')]
+## get final tabulation of phaseable composite mutations associated with therapeutic resistance
+info <- dd[,summarize_composite_with_alleles(.SD),by=c('Hugo_Symbol','label','phase')]
 info <- info[phase %in% c('cis','cis*','trans'),]
 summarize_gene <- function(info) list(n=sum(info$n))
 ns <- info[,summarize_gene(.SD),by=Hugo_Symbol]
@@ -731,7 +737,7 @@ info$Hugo_Symbol <- factor(info$Hugo_Symbol, levels=ns$Hugo_Symbol)
 info <- info[order(info$Hugo_Symbol,info$n,decreasing=F),]
 info$label <- factor(info$label, levels=info$label)
 
-## get the number of cis/trans compound mutations not associated with resistance
+## get the number of cis/trans composite mutations not associated with resistance
 d <- d_phased
 d <- d[exclude==F & (putative_resistance_mutation.1==F & putative_resistance_mutation.2==F),]
 d$important.1 <- d$hotspot.1==T | d$oncogenic.1 %in% c('Oncogenic','Likely Oncogenic','Predicted Oncogenic') |
@@ -752,7 +758,7 @@ tbl$group <- 'All non-resistance mutations'
 tbl_rm <- data.table(phase=c('cis','trans'),N=c(sum(info$n[info$phase=='cis']),0),group='Resistance mutations')
 dat <- rbind(tbl, tbl_rm)
 
-# compare cis and trans rates between compounds associated with/without resistance
+# compare cis and trans rates between composites associated with/without resistance
 m0 <- as.data.frame(reshape(dat,idvar='group',timevar='phase',direction='wide'))
 m <- m0
 names(m) <- gsub('N[.]','',names(m))
@@ -771,7 +777,7 @@ pval
 
 ### Paragraph 7
 
-#### Percentage of cis compounds among oncogenes with greatest cis rate
+#### Percentage of cis composites among oncogenes with greatest cis rate
 
 ```{r, echo=T}
 ## count the instances of cis/trans per gene
@@ -782,7 +788,7 @@ d$important.2 <- d$hotspot.2==T | d$oncogenic.2 %in% c('Oncogenic','Likely Oncog
 dd <- d[important.1==T | important.2==T,]
 dd <- extract_cis_trans(dd)
 
-## get the number of patients with cis or trans compounds in each gene
+## get the number of patients with cis or trans composites in each gene
 quantify_gene <- function(d) {
     cis_unique_samples <- length(unique(strtrim(d$Tumor_Sample_Barcode[d$phase=='cis'],9)))
     trans_unique_samples <- length(unique(strtrim(d$Tumor_Sample_Barcode[d$phase=='trans'],9)))
@@ -795,8 +801,8 @@ result <- result[order(percent_cis,decreasing=T),]
 result$total_phaseable <- result$n.cis + result$n.trans
 result <- result[total_phaseable >= 5,]
 
-## exclude genes depleted for compounds as these are likely passengers
-result <- result[!Hugo_Symbol %in% dat_genes_depleted_for_compounds$Hugo_Symbol, ]
+## exclude genes depleted for composites as these are likely passengers
+result <- result[!Hugo_Symbol %in% dat_genes_depleted_for_composites$Hugo_Symbol, ]
 
 ## show results for oncogenes with decreasing cis proportion
 result[Role=='Oncogene']
@@ -809,13 +815,13 @@ result[Hugo_Symbol=='TP53']
 
 ### Paragraph 9
 
-#### Residues enriched for compound mutations
+#### Residues enriched for composite mutations
 ```{r,echo=T}
     d <- fread(here('data/residue_enrichment_precalculated.txt'))
     length(unique(d$query_mutation[d$q.value.enriched < 0.01])) 
 ```
 
-#### Genes with any enriched for compound mutations
+#### Genes with any enriched for composite mutations
 ```{r,echo=T}
     length(unique(d$query_gene[d$q.value.enriched < 0.01])) 
 ```
@@ -833,7 +839,7 @@ result[Hugo_Symbol=='TP53']
     sum(x$hotspotid!='')/nrow(x) ## hotspotid are from 24K analysis
 ```
 
-#### PIK3CA residues enriched for compounds are almost always in cis, and always arise as missense mutations
+#### PIK3CA residues enriched for composites are almost always in cis, and always arise as missense mutations
 ```{r, echo=T}
 tmp <- x[query_gene=='PIK3CA']
 tmp <- tmp[order(q.value.enriched,decreasing=F),]
@@ -868,7 +874,7 @@ out
 
 ### Paragraph 10
 
-#### Percentage of mutations including common TERT promoter variants that are compound
+#### Percentage of mutations including common TERT promoter variants that are composite
 
 ```{r, echo=T}
 d <- d_mutations
@@ -887,18 +893,18 @@ getN <- function(query.mutation, d) {
     mutant_samples <- d$Tumor_Sample_Barcode[d$mutation==query.mutation]
     samples_with_mutation <- d$Tumor_Sample_Barcode[d$Tumor_Sample_Barcode %in% mutant_samples]
     tbl <- table.freq(samples_with_mutation)
-    compound_samples <- tbl$value[tbl$N > 1]
+    composite_samples <- tbl$value[tbl$N > 1]
     singleton_samples <- tbl$value[tbl$N == 1]
-    n_compound <- length(unique(strtrim(compound_samples, 9)))
+    n_composite <- length(unique(strtrim(composite_samples, 9)))
     n_singleton <- length(unique(strtrim(singleton_samples, 9)))
     n_overall <- length(unique(strtrim(tbl$value, 9)))
-    list(mutation=query.mutation,n_compound=n_compound, n_singleton=n_singleton, n_overall=n_overall)
+    list(mutation=query.mutation,n_composite=n_composite, n_singleton=n_singleton, n_overall=n_overall)
 }
 l <- lapply(mutations, getN, d)
 l <- rbindlist(l)
 info <- l[order(n_overall,decreasing=T),]
 info <- info[n_overall >= 5,]
-info$`Percentage as compounds` <- round(100*info$n_compound / info$n_overall,3)
+info$`Percentage as composites` <- round(100*info$n_composite / info$n_overall,3)
 info[,n_singleton:=NULL]
 info$mutation <- paste('TERT',info$mutation)
 info
