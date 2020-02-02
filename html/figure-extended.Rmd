@@ -1,23 +1,32 @@
 ---
-output: pdf_document
+output:
+    html_document:
+        css: style.css
 chunk_output_type: console
+header-includes:
+- \pagenumbering{gobble}
+params:
+    set_title: "Extended Data Figures"
+title: "`r params$set_title`"
 ---
+
 
 ```{r setup, include = FALSE, echo = FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, autodep = knitr::dep_prev())
 source(here::here('r/prerequisites.R'))
 ```
 
-### extended a
+# EDF 1
 
-```{r panel_a, width=6, height=7}
+### EDF-1a
+
+```{r panel_edf1a, width=6, height=7}
 
 ## cohort sample-type breakdown
-d <- fread(here('data/data_clinical.txt'))
+d <- fread(here('data/data_clinical.txt.gz'))
 tbl <- table.freq(d$metamaintype)
 type_order <- c(tbl$value[tbl$value!='Other'],'Other')
 tbl$metamaintype <- factor(tbl$value, levels=(type_order))
-
 p <- ggplot(tbl,aes(x=metamaintype,y=N)) +
     geom_bar(stat='identity',color='white',fill='black',size=0.2) + 
     scale_y_continuous(expand=c(0,0)) +
@@ -28,13 +37,100 @@ p
 
 ```
 
+***
+
 \pagebreak
-### b
 
-```{r panel_b, width=6, height=5}
+### EDF-1b
 
-## extract/merge the shuffled compound rate
-l <- readRDS(here('data/observed_vs_expected_compounds_per_tmb_impact_precalculated.rds'))
+```{r panel_edf1b}
+
+## load data from permutations
+perm <- readRDS(here::here('data/observed_vs_expected_composites_impact_precalculated.rds'))
+obs <- perm$obs_all
+exp <- median(perm$dat_all$prop)
+
+## plot results
+perm$dat$group <- 'All samples'
+plot_dat <- perm$dat
+plot_dat$data <- 'Randomly shuffled'
+plot_dat$prop <- plot_dat$prop * 100
+obs_dat <- data.table(group='All samples')
+obs_dat$prop <- perm$obs*100
+obs_dat$data <- 'Observed'
+pd <- rbind(plot_dat, obs_dat, fill=T)
+x <- break_axis(pd$prop,maxlower=16,minupper=22,lowerticksize=1,upperticksize=1,ratio_lower_to_upper=0.5)
+pd$prop2 <- x$newy
+expected_color <- c('black','red')
+names(expected_color) <- c('Randomly shuffled','Observed')
+prop_label <- paste0(prettyNum(obs_dat$prop,digits=3),'%')
+p <- ggplot(pd,aes(x=prop2)) +
+    geom_histogram(binwidth=0.1,aes(fill=data),color='white',size=0.2) +
+    geom_vline(data=pd[data=='Observed',],aes(xintercept=prop2),color='red',linetype='dashed',size=0.5) +
+    geom_text(data=pd[1,],x=17.75,y=3000,color='red',label=prop_label) +
+    scale_fill_manual(values=expected_color,name=NULL) +
+    scale_x_continuous(breaks=c(x$breaks,18), labels=c(x$labels,24), limits=c(13.8,18.1)) +
+    scale_y_continuous(expand=c(0,0)) +
+    labs(x='Percent of cases\n(MSK-IMPACT)',y='Frequency') + 
+    theme_std(base_size=14) +
+    theme(legend.position='none',axis.ticks.y=element_blank(),axis.text.y=element_blank())
+p
+
+```
+
+***
+
+\pagebreak
+
+### EDF-1c
+
+```{r panel_edf1c}
+
+## note that we are correcting the number of samples overall to be the number of samples including those with 0 mutations based on the clinical data
+info_all <- readRDS(here('data/observed_vs_expected_composites_tcga_precalculated.rds'))
+obs <- info_all$obs_all
+exp <- median(info_all$dat_all$prop)
+
+## plot results (figure 1c in paper)
+info_all$dat$group <- 'All samples'
+plot_dat <- info_all$dat
+plot_dat$data <- 'Randomly shuffled'
+plot_dat$prop <- plot_dat$prop * 100
+obs_dat <- data.table(group='All samples')
+obs_dat$prop <- info_all$obs*100
+obs_dat$data <- 'Observed'
+pd <- rbind(plot_dat, obs_dat, fill=T)
+x <- break_axis(pd$prop,maxlower=16,minupper=22,lowerticksize=1,upperticksize=1,ratio_lower_to_upper=0.5)
+pd$prop2 <- x$newy
+expected_color <- c('black','red')
+names(expected_color) <- c('Randomly shuffled','Observed')
+obs_label <- paste0(prettyNum(obs*100,digits=3),'%')
+
+p <- ggplot(pd,aes(x=prop2)) +
+    geom_histogram(binwidth=0.1,aes(fill=data),color='white',size=0.2) +    
+    geom_vline(data=pd[data=='Observed',],aes(xintercept=prop2),color='red',linetype='dashed',size=1) +
+    geom_text(data=pd[min(which(data=='Observed')),],x=17.5,label=obs_label, y=3000,color='red',size=5) +
+    scale_fill_manual(values=expected_color,name=NULL) +
+    scale_x_continuous(breaks=c(x$breaks), labels=c(x$labels), limits=c(13.0,19.1)) +
+    scale_y_continuous(expand=c(0,0)) +
+    labs(x='Percent of cases\n(TCGA pan-cancer, fixed gene content)',y='Frequency') + 
+    theme_std(base_size=14) +
+    theme(legend.position='none',axis.ticks.y=element_blank(),axis.text.y=element_blank())
+p
+
+```
+
+
+***
+
+\pagebreak
+
+### EDF-1d
+
+```{r panel_edf1d, width=6, height=5}
+
+## extract/merge the shuffled composite rate
+l <- readRDS(here('data/observed_vs_expected_composites_per_tmb_impact_precalculated.rds'))
 burdens <- 1:50
 extract_shuffled_data <- function(burden, l) {
     out <- data.table(mu=l[[burden]]$mu, lwr=l[[burden]]$lwr, upr=l[[burden]]$upr, burden=l[[burden]]$burden, obs=l[[burden]]$obs, N=l[[burden]]$samples,p=l[[burden]]$p)
@@ -64,84 +160,386 @@ plot_dat2 <- dat[,c('burden','fit.obs'),with=F]
 setnames(plot_dat2,'fit.obs','prop')
 plot_dat2$type <- 'Observed'
 plot_dat2 <- plot_dat2[burden > 1,]
+plot_dat1$prop <- 100*plot_dat1$prop
+plot_dat2$prop <- 100*plot_dat2$prop
+
 
 ## plot
-cols <- colors$barplot2col
+cols <- c('black','#BFBEBD')
 names(cols) <- c('Observed','Expected')
-#labels <- as.character(0:40)
-#labels[labels %nin% as.character(seq(0,40,by=5))] <- ''
 
 p <- ggplot(plot_dat1,aes(x=burden)) + 
     geom_line(data=plot_dat1,aes(y=prop,color=type),size = 0.75) +
     geom_line(data=plot_dat2,aes(y=prop,color=type),size = 0.75) +
     scale_x_continuous(breaks=seq(0,40,by=5),limits=c(0,41),expand=c(0,0)) +
-    scale_y_continuous(limits=c(0,1.05),expand=c(0,0)) +
+    scale_y_continuous(limits=c(0,105),expand=c(0,0)) +
     scale_color_manual(values=cols,name=NULL) +
-    geom_text(data=plot_dat1[1,],x=6,y=0.9,label=pval_lab,size=3.5) + 
+    geom_text(data=plot_dat1[1,],x=6,y=90,label=pval_lab,size=3.5) + 
     theme_std(base_size=16) + 
-    labs(x='non-synonymous mutations/Mb',y='% samples with 1+ compound mutations') 
+    labs(x='Mutational burden (non-syn/Mb)',y='% of cases with\ncomposite mutations') 
 p
 
 ```
 
+
+
+***
+
 \pagebreak
-### 1C
 
-```{r panel_c}
+# EDF-2
 
-## note that we are correcting the number of samples overall to be the number of samples including those with 0 mutations based on the clinical data
-info_all <- readRDS(here('data/observed_vs_expected_compounds_tcga_precalculated.rds'))
-obs <- info_all$obs_all
-exp <- median(info_all$dat_all$prop)
+### EDF-2a
 
-## plot results (figure 1c in paper)
-info_all$dat$group <- 'All samples'
-plot_dat <- info_all$dat
-plot_dat$data <- 'Randomly shuffled'
-plot_dat$prop <- plot_dat$prop * 100
-obs_dat <- data.table(group='All samples')
-obs_dat$prop <- info_all$obs*100
-obs_dat$data <- 'Observed'
-pd <- rbind(plot_dat, obs_dat, fill=T)
-x <- break_axis(pd$prop,maxlower=16,minupper=22,lowerticksize=1,upperticksize=1,ratio_lower_to_upper=0.5)
-pd$prop2 <- x$newy
-expected_color <- c('black','red')
-names(expected_color) <- c('Randomly shuffled','Observed')
-obs_label <- paste0(prettyNum(obs*100,digits=3),'%')
+```{r panel_edf2a,width=8,height=10}
+## number of higher-order composite overall
+cols <- c(RColorBrewer::brewer.pal(8,'Paired'),'#BFBFBF')
+cols <- cols[c(2,4,3,1,5:length(cols))]
+names(cols) <- c('apobec','uv','smoking','mmr','pol','tmz','other','multiple','none')
+cols[names(cols)=='other'] <- 'black'
 
-p <- ggplot(pd,aes(x=prop2)) +
-    geom_histogram(binwidth=0.1,aes(fill=data),color='white',size=0.2) +    
-    geom_vline(data=pd[data=='Observed',],aes(xintercept=prop2),color='red',linetype='dashed',size=1) +
-    geom_text(data=pd[min(which(data=='Observed')),],aes(x=prop2),label=obs_label, y=1000,color='red',size=5) +
-    scale_fill_manual(values=expected_color,name=NULL) +
-    scale_x_continuous(breaks=c(x$breaks), labels=c(x$labels), limits=c(13.0,19.1)) +
-    scale_y_continuous(expand=c(0,0)) +
-    labs(x='Percentage',y='100,000 Random shuffles',title='TCGA pan-cancer, IMPACT genes') +
+check_singletons_vs_composites <- function(result) {
+    num_variants <- nrow(result) 
+    apobec <- sum(result$aetiology_class=='APOBEC') >= 1
+    uv <- sum(result$aetiology_class=='UV') >= 1
+    smoking <- sum(result$aetiology_class=='Smoking/Tobacco') >= 1
+    decomp_failed <- sum(result$aetiology_class=='Decomposition failed') >= 1
+    other <- sum(result$aetiology_class %in% 'Other') >= 1
+    none <- !apobec & !uv & !smoking & !other & !decomp_failed
+    list(num_variants=num_variants, 
+         none=none,
+         apobec=apobec, 
+         uv=uv, 
+         smoking=smoking, 
+         other=other,
+         decomp_failed=decomp_failed)
+}
+
+result <- fread(here('data/data_mutations_signature_attribution.txt.gz'))
+result[aetiology_class %nin% c('No attributed signature','Decomposition failed','APOBEC','UV','Smoking/Tobacco'),aetiology_class:='Other']
+
+## for singletons and composites, check if any are assigned to smoking/uv/apobec
+x <- result[,check_singletons_vs_composites(.SD),by=c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol')]
+x <- x[num_variants > 1,]
+x <- melt(x,id.vars=c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol','num_variants'))
+x <- x[value==T & variable!='decomp_failed',]
+x$variable <- factor(x$variable, levels=c('none','apobec','uv','smoking','other'))
+
+## merge numbers in composites with 6+ variants
+xm <- xtabs(~num_variants + variable, data=x)
+toadd <- colSums(xm[as.integer(rownames(xm)) >= 6,])
+row_to_replace <- min(which(as.integer(rownames(xm))>=6))
+xm[row_to_replace,] <- toadd
+xm <- xm[1:row_to_replace,]
+rownames(xm)[nrow(xm)] <- '6+'
+cols <- cols[names(cols) %in% colnames(xm)]
+num_variant_fields <- rownames(xm)
+cnt_associated <- rowSums(xm[,names(cols)[names(cols)!='none']])
+cnt_overall <- rowSums(xm)
+pct_associated <- data.table(num_variants=rownames(xm),value=cnt_overall,prop_associated=paste0(round(100*(cnt_associated / cnt_overall),1),'%'))
+xm <- xm/rowSums(xm)
+xm <- adt(melt(xm))
+xm$variable <- factor(xm$variable, levels=rev(names(cols)))
+xm$num_variants <- factor(xm$num_variants, levels=rev(num_variant_fields))
+
+## plot gene-level rate of composites associated with mutation signatures
+p1 <- ggplot(xm,aes(x=num_variants,y=100*value)) +
+    geom_bar(stat='identity',aes(fill=variable),width=0.8) +
+    scale_fill_manual(values=cols, name='Associated signature') + 
+    coord_flip() +
+    scale_y_continuous(expand=c(0,0),position='right') + 
     theme_std(base_size=16) +
-    theme(legend.position='none')
+    theme(legend.position='right') +
+    labs(y='% attributed to mutational signatures',
+         x='Number of variants in composite mutation')
+p1 <- extract_gglegend(p1)
+
+t2 <- data.table(num_variants=names(cnt_overall), cnt_overall)
+t2$num_variants <- factor(t2$num_variants,levels=rev(num_variant_fields))
+t2$label <- t2$cnt_overall
+t2$cnt_overall <- t2$cnt_overall / 1000
+p2 <- ggplot(t2,aes(x=num_variants,y=cnt_overall)) + 
+    geom_bar(stat='identity',width=0.8,fill='black') +
+    geom_text(aes(label=label),hjust=-0.2,vjust=0.5) +
+    scale_y_continuous(expand=c(0,0),position='right',limits=c(0,5),breaks=seq(0,4,by=1)) + 
+    coord_flip() +
+    theme_std(base_size=16) +
+    theme( axis.ticks.y=element_blank(), axis.text.y=element_blank()) + #,axis.text.x=element_text(angle=-90,hjust=1,vjust=0.5)) +
+    labs(x=NULL,y='N Composites\n(x1000)')
+
+p <- plot_grid(p1$plot, p2, align='h', rel_widths=c(3,1))
+p <- plot_grid(p,p1$legend, ncol=1,nrow=2, rel_heights=c(5,2))
 p
 
 ```
 
-\pagebreak
-### 1D
+***
 
-```{r panel_d,width=8,height=6}
-## get compound rate per gene per maintype
-d <- fread(here('data/data_mutations.txt'), select=c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol','exclude','putative_resistance_mutation','Role'))
+\pagebreak
+
+# EDF-2
+
+### EDF-2b(i)
+
+```{r panel_edf2bi, width=8, height=5} 
+d <- fread(here('data/data_mutations_tcga.txt.gz')) 
+clin <- fread(here('data/data_clinical_tcga.txt.gz'))
+samples <- clin$Tumor_Sample_Barcode[clin$DISEASE=='SKCM']
+d <- d[Tumor_Sample_Barcode %in% samples,]
+
+## annotate mutations with if they are part of a composite
+d$tsbgene <- paste(d$Tumor_Sample_Barcode,d$Hugo_Symbol)
+tbl <- table.freq(d$tsbgene)
+d <- merge(d, tbl, by.x='tsbgene', by.y='value', all.x=T)
+
+## subset for SNPs, then merge with dyads centered within 1000bp of the SNP
+d$start <- d$Start_Position-1000
+d$end <- d$Start_Position+1000
+
+## get mutation rate around active TFBSs
+tabulate <- function(d, tfbs) {
+    d <- d[Variant_Type=='SNP']
+    setkey(d,'Chromosome','start','end')
+
+    dd <- foverlaps(d, tfbs, type='any')
+    dd_notfbs <- dd[is.na(tfbs_start),] ## mutations not within 1000bp of any tfbs
+    dd$distance_to_tfbs <- dd$Start_Position-dd$tfbs_start
+    dd[is.na(tfbs_start),distance_to_tfbs:=-9999]
+
+    ## tabulate number of SNPs at any distance to tfbs
+    x <- table.freq(dd$distance_to_tfbs)
+    x$distance <- as.integer(x$value)
+    x[,value:=NULL]
+    x
+}
+
+active_tfbs_coding <- fread(here('data/tfbs_skcm_dhs_coding.txt'))
+active_tfbs_coding <- active_tfbs_coding[,c('chr','tfbs_start','tfbs_end','tfbs_id'),with=F]
+setkey(active_tfbs_coding,'chr','tfbs_start','tfbs_end')
+
+dat <- tabulate(d, active_tfbs_coding)
+dat$prop <- dat$N / sum(dat$N)
+dat <- dat[order(distance),]
+dat <- dat[distance >= -1e3 & distance <= 1e3]
+
+## fit a smooth spline to the data
+spl <- smooth.spline(x=dat$distance,y=dat$prop,spar=1)
+pred <- predict(spl)
+dat$pred <- pred$y
+
+max_amp <- max(dat$pred)
+dat$diff_from_halfmax <- abs(dat$pred - max_amp/2)
+lwr <- which(dat$diff_from_halfmax==min(dat$diff_from_halfmax[dat$distance < 0]))
+upr <- which(dat$diff_from_halfmax==min(dat$diff_from_halfmax[dat$distance > 0]))
+FWHM <- dat$distance[c(lwr,upr)]
+dm <- melt(dat[,c('distance','prop','pred'),with=F], id.vars='distance')
+dm[variable=='prop',variable:='Observed']
+dm[variable=='pred',variable:='Fit']
+
+cols <- c('#BFBFBF','steelblue')
+names(cols) <- c('Observed','Fit')
+
+p0 <- ggplot(dm,aes(x=distance,y=value)) +
+    geom_point(aes(color=variable)) +
+    scale_color_manual(values=cols,name=NULL) + 
+    geom_vline(xintercept=FWHM,color='black',linetype=2,size=0.5) +
+    xlim(c(-1000,1000)) + ylim(c(0,7.5e-5)) +
+    theme_std(base_size=16) + 
+    theme(legend.position='none') +
+    labs(x='Distance from active-TFBS [bp]',y='Proportion of SNVs')
+
+## compare the fraction of singletons and composites to fall within the FWHM range
+d_composite <- d[N > 1,]
+d_singleton <- d[N == 1,]
+ddc <- tabulate(d_composite, active_tfbs_coding)
+ddc$class <- 'SNPs in composites'
+ddc$prop <- ddc$N / sum(ddc$N)
+dds <- tabulate(d_singleton, active_tfbs_coding)
+dds$class <- 'SNPs in singletons'
+dds$prop <- dds$N / sum(dds$N)
+dd <- rbind(ddc,dds)
+dd <- dd[order(distance,class)]
+dd$within_fwhm <- dd$distance >= FWHM[1] & dd$distance <= FWHM[2]
+
+x_c <- sum(dd$N[dd$within_fwhm==T & dd$class=='SNPs in composites'])
+y_c <- sum(dd$N[dd$within_fwhm==F & dd$class=='SNPs in composites'])
+N_c <- sum(dd$N[dd$class=='SNPs in composites'])
+x_s <- sum(dd$N[dd$within_fwhm==T & dd$class=='SNPs in singletons'])
+y_s <- sum(dd$N[dd$within_fwhm==F & dd$class=='SNPs in singletons'])
+N_s <- sum(dd$N[dd$class=='SNPs in singletons'])
+
+ci <- binom::binom.confint(c(x_s,x_c),c(N_s,N_c),method='exact')
+ci$type <- c('Singleton','Composite')
+ci$mean <- 100*ci$mean
+ci$lower <- 100*ci$lower
+ci$upper <- 100*ci$upper
+
+m <- as.matrix(rbind(c(y_s,x_s),c(y_c,x_c)))
+pval <- prop.test(m)$p.value
+plabel <- paste0('P=',prettyNum(pval,digits=1))
+
+p1 <- ggplot(ci,aes(x=type,y=mean)) +
+    geom_bar(stat='identity',fill='black') +
+    geom_signif(comparison=list(c('Composite','Singleton')),annotation=plabel,y_position=2) +
+    scale_y_continuous(expand=c(0,0),limits=c(0,2.2)) + 
+    geom_errorbar(aes(min=lower,max=mean,width=NA),size=1,color='white') +
+    geom_errorbar(aes(min=mean,max=upper,width=NA),size=1,color='black') +
+    theme_std(base_size=16) +
+    theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
+    labs(x=NULL,y='Prop of SNVs proximal to\nactive coding TFBS')
+
+p <- plot_grid(p0, p1, ncol=2, rel_widths=c(3,1))
+p
+
+```
+
+***
+
+\newpage
+
+### EDF-2b(ii)
+
+```{r panel_edf2bii, width=7, height=9} 
+
+## check whether nucleosome dyad position correlates with composite mutations
+## - for all mutations in composites, check if they are within a 2001bp window centered at a dyad
+## - for the ones that are, get their distance from the nearest dyad, and then get the overall 
+## - number of mutations at each distance from the nearest dyad.
+
+d <- fread(here('data/data_mutations.txt.gz'), 
+           select=c('metamaintype','exclude','putative_resistance_mutation','Tumor_Sample_Barcode',
+                    'Hugo_Symbol','Chromosome','Start_Position','End_Position','Variant_Type'))
+
+## annotate mutations with if they are part of a composite
+d$tsbgene <- paste(d$Tumor_Sample_Barcode,d$Hugo_Symbol)
+tbl <- table.freq(d$tsbgene)
+d <- merge(d, tbl, by.x='tsbgene', by.y='value', all.x=T)
+
+## subset for SNPs, then merge with dyads centered within 1000bp of the SNP
+d$start <- d$Start_Position-1000
+d$end <- d$Start_Position+1000
+d <- d[exclude==F,] 
+
+dyads <- fread(here('data/dyads_genic.bed'))
+names(dyads) <- c('Chromosome','start','end')
+dyads$Chromosome <- gsub('chr','',dyads$Chromosome)
+setkey(dyads,'Chromosome','start','end')
+
+tabulate <- function(d, dyads) {
+    d <- d[Variant_Type=='SNP']
+    setkey(d,'Chromosome','start','end')
+
+    dd <- foverlaps(d, dyads, type='any')
+    dd_nodyad <- dd[is.na(start),] ## mutations not within 1000bp of any dyad
+    dd$distance_to_dyad <- dd$Start_Position-dd$start
+    dd[is.na(start),distance_to_dyad:=-9999]
+
+    ## tabulate number of SNPs at any distance to dyad
+    x <- table.freq(dd$distance_to_dyad)
+    x$distance <- as.integer(x$value)
+    x[,value:=NULL]
+    x
+}
+
+dat <- tabulate(d, dyads)
+dat$prop <- dat$N / sum(dat$N)
+dat <- dat[order(distance),]
+dat <- dat[distance >= -1e3 & distance <= 1e3]
+
+## fit a smooth spline to the data
+spl <- smooth.spline(x=dat$distance,y=dat$prop,spar=1)
+pred <- predict(spl)
+dat$pred <- pred$y
+
+max_amp <- max(dat$pred)
+dat$diff_from_halfmax <- abs(dat$pred - max_amp/2)
+lwr <- which(dat$diff_from_halfmax==min(dat$diff_from_halfmax[dat$distance < 0]))
+upr <- which(dat$diff_from_halfmax==min(dat$diff_from_halfmax[dat$distance > 0]))
+FWHM <- dat$distance[c(lwr,upr)]
+dm <- melt(dat[,c('distance','prop','pred'),with=F], id.vars='distance')
+dm[variable=='prop',variable:='Observed']
+dm[variable=='pred',variable:='Fit']
+
+cols <- c('#BFBFBF','steelblue')
+names(cols) <- c('Observed','Fit')
+
+p0 <- ggplot(dm,aes(x=distance,y=value)) +
+    geom_point(aes(color=variable)) +
+    scale_color_manual(values=cols,name=NULL) + 
+    geom_vline(xintercept=FWHM,color='black',linetype=2,size=0.5) +
+    xlim(c(-1000,1000)) + ylim(c(0,0.0003)) +
+    theme_std(base_size=16) + 
+    theme(legend.position='none') +
+    labs(x='Distance from dyad [bp]',y='Proportion of SNVs')
+
+## compare the fraction of singletons and composites to fall within the FWHM range
+d_composite <- d[N > 1,]
+d_singleton <- d[N == 1,]
+ddc <- tabulate(d_composite, dyads)
+ddc$class <- 'SNPs in composites'
+ddc$prop <- ddc$N / sum(ddc$N)
+dds <- tabulate(d_singleton, dyads)
+dds$class <- 'SNPs in singletons'
+dds$prop <- dds$N / sum(dds$N)
+dd <- rbind(ddc,dds)
+dd <- dd[order(distance,class)]
+dd$within_fwhm <- dd$distance >= FWHM[1] & dd$distance <= FWHM[2]
+
+x_c <- sum(dd$N[dd$within_fwhm==T & dd$class=='SNPs in composites'])
+y_c <- sum(dd$N[dd$within_fwhm==F & dd$class=='SNPs in composites'])
+N_c <- sum(dd$N[dd$class=='SNPs in composites'])
+x_s <- sum(dd$N[dd$within_fwhm==T & dd$class=='SNPs in singletons'])
+y_s <- sum(dd$N[dd$within_fwhm==F & dd$class=='SNPs in singletons'])
+N_s <- sum(dd$N[dd$class=='SNPs in singletons'])
+
+ci <- binom::binom.confint(c(x_s,x_c),c(N_s,N_c),method='exact')
+ci$type <- c('Singleton','Composite')
+ci$mean <- 100*ci$mean
+ci$lower <- 100*ci$lower
+ci$upper <- 100*ci$upper
+
+m <- as.matrix(rbind(c(y_s,x_s),c(y_c,x_c)))
+pval <- prop.test(m)$p.value
+plabel <- paste0('P=',prettyNum(pval,digits=1))
+
+p1 <- ggplot(ci,aes(x=type,y=mean)) +
+    geom_bar(stat='identity',fill='black') +
+    geom_signif(comparison=list(c('Composite','Singleton')),annotation=plabel,y_position=11.5) +
+    scale_y_continuous(expand=c(0,0),limits=c(0,12.5)) + 
+    geom_errorbar(aes(min=lower,max=mean,width=NA),size=1,color='white') +
+    geom_errorbar(aes(min=mean,max=upper,width=NA),size=1,color='black') +
+    theme_std(base_size=16) +
+    theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
+    labs(x=NULL,y='Prop of SNVs proximal to\nnucleosome dyad')
+
+
+p <- plot_grid(p0, p1, ncol=2, rel_widths=c(3,1))
+p
+```
+
+***
+
+\pagebreak
+
+# EDF-3
+
+### EFD-3a
+
+```{r panel_edf3a,width=8,height=6}
+d <- fread(here('data/data_mutations.txt.gz'), select=c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol','exclude','putative_resistance_mutation','Role'))
 d <- d[putative_resistance_mutation==F & exclude==F, c('Role','Tumor_Sample_Barcode','Hugo_Symbol'),with=F]
 
 count_patients <- function(d) {
     tbl <- table.freq(d$Tumor_Sample_Barcode)
     samples <- tbl$value
-    compound_samples <- tbl$value[tbl$N > 1]
-    nc <- length(unique(strtrim(compound_samples,9)))
+    composite_samples <- tbl$value[tbl$N > 1]
+    nc <- length(unique(strtrim(composite_samples,9)))
     singleton_samples <- tbl$value[tbl$N == 1]
     ns <- length(unique(strtrim(singleton_samples,9)))
-    list(n_singleton=ns, n_compound=nc)
+    list(n_singleton=ns, n_composite=nc)
 }
 info <- d[,count_patients(.SD),by=c('Hugo_Symbol','Role')]
-info$n_patients <- info$n_singleton + info$n_compound
+info$n_patients <- info$n_singleton + info$n_composite
 info[Role=='Oncogene/TSG',Role:='Other']
 info[Role=='n/a',Role:='Other']
 info[is.na(Role),Role:='Other']
@@ -162,12 +560,13 @@ dat3 <- subset(info,'Oncogene',n=10)
 
 dat <- rbind(dat1, dat2, dat3)
 dat$gene <- paste(dat$Role,dat$Hugo_Symbol)
-dat$Role <- factor(dat$Role, levels=c('Oncogene','Other','TSG'))
-dat <- dat[order(Role,n_compound, decreasing=F),]
-dat$pct_compound <- round(100*dat$n_compound/dat$n_patients,1)
+dat$Role <- factor(dat$Role, levels=c('Other','TSG','Oncogene'))
+
+dat <- dat[order(Role,n_composite, decreasing=F),]
+dat$pct_composite <- round(100*dat$n_composite/dat$n_patients,1)
 dat$gene <- factor(dat$gene, levels=dat$gene)
 dat[,c('i'):=NULL]
-dm <- melt(dat[,c('Hugo_Symbol','Role','n_compound','n_patients','pct_compound','gene'),with=F],id.vars=c('Hugo_Symbol','Role','gene','pct_compound'))
+dm <- melt(dat[,c('Hugo_Symbol','Role','n_composite','n_patients','pct_composite','gene'),with=F],id.vars=c('Hugo_Symbol','Role','gene','pct_composite'))
 dm$variable <- gsub('n_','',dm$variable)
 dm[variable=='patients',label:=value]
 dm[variable=='patients',value:=as.integer(-1*value)]
@@ -179,7 +578,7 @@ dm[value > 0,value:=as.numeric(value/100)]
 dm[Hugo_Symbol=='TP53' & variable=='patients',value:=-8.75]
 
 cols <- c('#EC7C65','#1E88AC')
-names(cols) <- c('compound','patients')
+names(cols) <- c('composite','patients')
 
 p1 <- ggplot(dm,aes(x=Hugo_Symbol,y=value)) +
     geom_bar(stat='identity',aes(fill=variable)) +
@@ -190,14 +589,14 @@ p1 <- ggplot(dm,aes(x=Hugo_Symbol,y=value)) +
     theme_std(base_size=12) + 
     theme(axis.line.y=element_blank(),axis.ticks.y=element_blank(),legend.position='none') +
     coord_flip() +
-    labs(x=NULL,y='Mutant patients (x1000)|Compound cases')
+    labs(x=NULL,y='N mutant patients (x1000)        Composite cases')
 
 dat$Hugo_Symbol <- factor(dat$Hugo_Symbol, levels=levels(dm$Hugo_Symbol))
-dat$label <- dat$pct_compound
+dat$label <- dat$pct_composite
 dat[Hugo_Symbol!='APC',label:=NA]
-dat[Hugo_Symbol=='APC',pct_compound:=23]
+dat[Hugo_Symbol=='APC',pct_composite:=23]
 
-p2 <- ggplot(dat,aes(x=Hugo_Symbol,y=pct_compound)) +
+p2 <- ggplot(dat,aes(x=Hugo_Symbol,y=pct_composite)) +
     geom_bar(stat='identity') +
     geom_text(color='white',aes(label=label),hjust=2,size=5) +
     scale_y_continuous(expand=c(0,0),limits=c(0,25),
@@ -206,146 +605,290 @@ p2 <- ggplot(dat,aes(x=Hugo_Symbol,y=pct_compound)) +
     theme(axis.line.y=element_blank(),axis.ticks.y=element_blank(),legend.position='none',
           axis.text.y=element_blank()) +
     coord_flip() +
-    labs(x=NULL,y='% compound mutant')
+    labs(x=NULL,y='% composite mutant')
 
 p <- plot_grid(p1,p2,rel_widths=c(3,1),align='h',ncol=2,nrow=1)
 p
-
 ```
 
+***
+
 \pagebreak
-### 1E
 
-```{r panel_e,width=8,height=10}
-## number of higher-order compound overall
+### EFD-3b
 
-cols <- c(RColorBrewer::brewer.pal(8,'Paired'),'#BFBFBF')
-cols <- cols[c(2,4,3,1,5:length(cols))]
-names(cols) <- c('apobec','uv','smoking','mmr','pol','tmz','other','multiple','none')
-cols[names(cols)=='other'] <- 'black'
+```{r panel_edf3b, width=8, height=5} 
 
+## QQ plot entirely for oncogenes
 
-check_singletons_vs_compounds <- function(result) {
-    num_variants <- nrow(result) 
-    apobec <- sum(result$aetiology_class=='APOBEC') >= 1
-    uv <- sum(result$aetiology_class=='UV') >= 1
-    smoking <- sum(result$aetiology_class=='Smoking/Tobacco') >= 1
-    decomp_failed <- sum(result$aetiology_class=='Decomposition failed') >= 1
-    other <- sum(result$aetiology_class %in% 'Other') >= 1
-    none <- !apobec & !uv & !smoking & !other & !decomp_failed
-    list(num_variants=num_variants, 
-         none=none,
-         apobec=apobec, 
-         uv=uv, 
-         smoking=smoking, 
-         other=other,
-         decomp_failed=decomp_failed)
+gene_info <- fread(here('data/gene_info.txt'),
+                   select=c('Hugo_Symbol','Role','panel_introduced','reptime','percentage_gene_gc_content',
+                            'cds_length','hic'))
+
+prep_data <- function(d) {
+    d <- d[exclude==F & 
+           putative_resistance_mutation==F,c('Tumor_Sample_Barcode','Hugo_Symbol','Variant_Type','Variant_Classification','tcn',
+                                             'putative_resistance_mutation','mutationid','high_tmb','hotspot_class'),with=F]
+    d <- merge(d, gene_info, by='Hugo_Symbol', all.x=T)
+
+    ## consider the TERT promoter as a unique gene, where the cds_length is now the total length of the promoter region covered by IMPACT
+    tert_promoter <- which(d$Hugo_Symbol=='TERT' & d$Variant_Classification=='TERT promoter')
+    d[tert_promoter, Hugo_Symbol:='TERT promoter']
+    d[tert_promoter, cds_length:=499] ## this is the length of the promoter region of TERT covered by IMPACT468
+    d[tert_promoter, percentage_gene_gc_content:=0.7896] ## this is the %GC content of TERT promoter region
+    
+    get_composite_rate_per_gene <- function(d) {
+        tbl <- table.freq(d$Tumor_Sample_Barcode)
+        samples <- tbl$value
+        composite_samples <- tbl$value[tbl$N > 1]
+        singleton_samples <- tbl$value[tbl$N == 1]
+
+        ## don't overcount multiple samples per patient
+        samples <- length(unique(strtrim(samples, 9)))
+        composites <- length(unique(strtrim(composite_samples, 9)))
+        singletons <- length(unique(strtrim(singleton_samples, 9)))
+        tcn <- mean(d$tcn,na.rm=T)
+        list(singletons=singletons,composites=composites,samples=samples,tcn=tcn,
+             reptime=unique(d$reptime),percentage_gene_gc_content=unique(d$percentage_gene_gc_content),cds_length=unique(d$cds_length),
+             hic=unique(d$hic),
+             panel_introduced=unique(d$panel_introduced),Role=unique(d$Role))
+    }
+
+    res <- d[,get_composite_rate_per_gene(.SD),by=Hugo_Symbol]
+    res[is.nan(tcn),tcn:=2]
+    res$hic[is.na(res$hic)] <- round(mean(res$hic,na.rm=T))
+    res$panel_introduced <- factor(res$panel_introduced)
+    res$Hugo_Symbol <- gsub('-','_',res$Hugo_Symbol)
+    res$Hugo_Symbol <- gsub(' ','_',res$Hugo_Symbol)
+    res
 }
 
-result <- fread(here('data/data_mutations_signature_attribution.txt'))
-result[aetiology_class %nin% c('No attributed signature','Decomposition failed','APOBEC','UV','Smoking/Tobacco'),aetiology_class:='Other']
+d <- fread(here('data/data_mutations.txt.gz'))
+d_onc <- prep_data(d[Role=='Oncogene',])
+d_onc$class <- 'Oncogenes'
+#d_onc <- merge(d_onc, obs, by='Hugo_Symbol', all.x=T)
+d_onc$observed_proportion <- d_onc$composites / d_onc$samples
 
+# Run the gene-enrichment binomial test on the different prepped datasets
+test_data <- function(res) { 
+    m <- glm.nb(composites ~ offset(log(samples)) + reptime + cds_length + percentage_gene_gc_content + panel_introduced + tcn + hic, data=res)
+    summary(m)$coefficients
+    predictions <- predict(m,newdata=res,type='response')
+    res$predicted_proportion <- predictions / res$samples
+    dat <- res[,c('Hugo_Symbol','composites','samples','predicted_proportion','observed_proportion','composites','samples','Role'),with=F]
 
-## for singletons and compounds, check if any are assigned to smoking/uv/apobec
-x <- result[,check_singletons_vs_compounds(.SD),by=c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol')]
-x <- x[num_variants > 1,]
-x <- melt(x,id.vars=c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol','num_variants'))
-x <- x[value==T & variable!='decomp_failed',]
-x$variable <- factor(x$variable, levels=c('none','apobec','uv','smoking','other'))
+    test_gene <-function(dat) {
+        x <- tryCatch({
+            tst <- binom.test(dat$composites,dat$samples,dat$predicted_proportion,alternative='greater')
+            p.value <- tst$p.value
+            list(p.value=p.value)
+        },error=function(e) {
+            list(p.value=as.numeric(NA))
+        })
+        dat$p.value <- x$p.value
+        dat
+    }
+    dat <- dat[,test_gene(.SD),by=Hugo_Symbol]
+    dat$logOR <- log2(dat$observed_proportion/dat$predicted_proportion)
+    dat <- dat[order(p.value,decreasing=F),]
+    dat$q.value <- p.adjust(dat$p.value,method='BH')
+    dat
+}
 
-## merge numbers in compounds with 6+ variants
-xm <- xtabs(~num_variants + variable, data=x)
-toadd <- colSums(xm[as.integer(rownames(xm)) >= 6,])
-row_to_replace <- min(which(as.integer(rownames(xm))>=6))
-xm[row_to_replace,] <- toadd
-xm <- xm[1:row_to_replace,]
-rownames(xm)[nrow(xm)] <- '6+'
-cols <- cols[names(cols) %in% colnames(xm)]
-num_variant_fields <- rownames(xm)
-cnt_associated <- rowSums(xm[,names(cols)[names(cols)!='none']])
-cnt_overall <- rowSums(xm)
-pct_associated <- data.table(num_variants=rownames(xm),value=cnt_overall,prop_associated=paste0(round(100*(cnt_associated / cnt_overall),1),'%'))
-xm <- xm/rowSums(xm)
-xm <- adt(melt(xm))
-xm$variable <- factor(xm$variable, levels=rev(names(cols)))
-xm$num_variants <- factor(xm$num_variants, levels=rev(num_variant_fields))
+result_onc <- test_data(d_onc)
+result_onc <- result_onc[,c('Hugo_Symbol','p.value','q.value'),with=F]
+names(result_onc) <- c('Hugo_Symbol','p_enriched','q_enriched')
 
-## plot gene-level rate of compounds associated with mutation signatures
-p1 <- ggplot(xm,aes(x=num_variants,y=100*value)) +
-    geom_bar(stat='identity',aes(fill=variable),width=0.8) +
-    scale_fill_manual(values=cols, name='Associated signature') + 
-    coord_flip() +
-    scale_y_continuous(expand=c(0,0),position='right') + 
-    theme_std(base_size=16) +
-    theme(legend.position='right') +
-    labs(y='% attributed to mutational signatures',
-         x='Number of variants in compound mutation')
-p1 <- extract_gglegend(p1)
+# generate qqplot
+get_qqplot <- function(dat) {
+    N = nrow(dat)
+    ci <- 0.95
+    df <- data.table(observed=-log10(dat$p_enriched),
+                     expected=-log10(1:N/N),
+                     p=dat$p_enriched,
+                     q=dat$q_enriched,
+                     gene=dat$Hugo_Symbol,
+                     cupper=-log10(qbeta(ci,1:N, N - 1:N + 1)),
+                     clower=-log10(qbeta(1 - ci, 1:N, N - 1:N + 1)))
+    df$Significance <- ifelse(df$q < 0.01,'q < 0.01','Not significant')
+    df$Significance <- factor(df$Significance,levels=c('q < 0.01','Not significant'))
+    df$label <- df$gene
+    df$label[df$q >= 0.01] <- NA
 
-t2 <- data.table(num_variants=names(cnt_overall), cnt_overall)
-t2$num_variants <- factor(t2$num_variants,levels=rev(num_variant_fields))
-t2$label <- t2$cnt_overall
-t2$cnt_overall <- t2$cnt_overall / 1000
-p2 <- ggplot(t2,aes(x=num_variants,y=cnt_overall)) + 
-    geom_bar(stat='identity',width=0.8) +
-    geom_text(aes(label=label),hjust=-0.2,vjust=0.5,size=3) +
-    scale_y_continuous(expand=c(0,0),position='right',limits=c(0,4),breaks=seq(0,4,by=1)) + 
-    coord_flip() +
-    theme_std(base_size=16) +
-    theme( axis.ticks.y=element_blank(), axis.text.y=element_blank()) + #,axis.text.x=element_text(angle=-90,hjust=1,vjust=0.5)) +
-    labs(x=NULL,y='N Compounds\n(x1000)')
+    ## make plot
+    log10Pe = expression(paste("Expected -log"[10], plain(P)))
+    log10Po = expression(paste("Observed -log"[10], plain(P)))
+    mycols <- c('#a6a6a6','#e50000')
+    names(mycols) <- c('Not significant','q < 0.01')
+    p <- ggplot(df,aes(x=expected,y=observed)) +
+        geom_point(pch=19, size=2.5, aes(color=Significance)) +
+        geom_abline(intercept=0, slope=1, alpha=0.5) +
+        geom_line(aes(expected, cupper), linetype=2) +
+        geom_line(aes(expected, clower), linetype=2) +
+        scale_color_manual(values=mycols) +
+        xlab(log10Pe) +
+        ylab(log10Po) +
+        geom_text_repel(aes(label=label), color='black',size=2.5, na.rm=T) +
+        theme_std(base_size=16)
+    p
+}
 
-p <- plot_grid(p1$plot, p2, align='h', rel_widths=c(3,1))
-p <- plot_grid(p,p1$legend, ncol=1,nrow=2, rel_heights=c(5,1))
+p1 <- get_qqplot(result_onc) + 
+    ylim(80,100) +
+    theme(legend.position='none',axis.line.x=element_blank(),axis.ticks.x=element_blank(),axis.text.x=element_blank()) +
+    labs(x=NULL,y=NULL,subtitle='Enrichment for composite mutations among oncogenes') 
+    
+p2 <- get_qqplot(result_onc) + 
+    ylim(0,10) +
+    theme(legend.position='none')
+
+p <- plot_grid(p1,p2,rel_heights=c(1,3),align='v',ncol=1,nrow=2)
 p
-
-```
-
-\pagebreak
-### 1F
-
-```{r panel_f,width=8,height=6}
-## gene enrichment/depletion volcano plot
-
-dat <- fread(here('data/gene_enrichment_precalculated.txt'))
-dat$nlog10q <- -log10(dat$q_twosided)
-dat$direction <- 'Not significant'
-dat[q_twosided < 0.01 & logOR > 0,direction:='Enriched']
-dat[q_twosided < 0.01 & logOR < 0,direction:='Depleted']
-dat$direction <- factor(dat$direction, levels=c('Enriched','Depleted','Not significant'))
-dat$label <- dat$Hugo_Symbol
-dat[q_twosided >= 0.01 | (q_twosided < 0.01 & q_twosided >= 1e-6 & direction=='Enriched') , label:=NA]
-dat[nlog10q >= 150, nlog10q := 150]
-
-y <- break_axis(dat$nlog10q, maxlower=40, minupper=50, lowerticksize=10, upperticksize=50, ratio_lower_to_upper=0.3)
-dat$y <- y$newy
-cols <- colors$sig3
-
-p <- ggplot(dat, aes(x=logOR,y=y)) +
-    geom_point(aes(size=samples,color=direction),pch=19) +
-    geom_text_repel(aes(label=label, color=direction)) +
-    scale_y_continuous(limits=y$limits, breaks=y$breaks, labels=y$labels, expand=c(0,0)) +
-    scale_fill_manual(values=cols) +
-    scale_color_manual(values=cols) +
-    theme_std(base_size=16) +
-    labs(y='-log10(q_twosided)',title='patient level')
-p
-
 ```
 
 
+***
+
 \pagebreak
-### 1G
-```{r panel_g}
 
-cols <- RColorBrewer::brewer.pal(8,'Paired')
-cols <- c('black',cols,'#BFBFBF')
-names(cols) <- c('Decomposition failed','Other','Multiple, non-separable','TMZ','POLE','MMR','Smoking/Tobacco','UV','APOBEC','No attributed signature')
+# EDF-4
 
-# for combined compounds across all genes, get the
+```{r panel_edf4, width=8, height=5} 
+
+## define helper functions here
+extract_cis_trans <- function(d) {
+    ## don't overcount multiple pairs of composite mutations in the same sample+gene+phase
+    d$id <- paste(d$Tumor_Sample_Barcode,d$Hugo_Symbol,d$phase)
+
+    ## don't overcount 3+ mutation composite-mutations; using unique sample/gene/Class counts
+    d <- d[!duplicated(id),c('Tumor_Sample_Barcode','metamaintype','Hugo_Symbol','Role','phase','id',
+                             'putative_resistance_mutation.1','putative_resistance_mutation.2',
+                             'HGVSp_Short.1','HGVSp_Short.2',
+                               'ccf_Mcopies.1','clonal.1','ccf_Mcopies.2','clonal.2','important.1','important.2',
+                               'common_reads_alt1_alt2','common_reads_alt1_ref2','common_reads_ref1_alt2','common_reads_ref1_ref2',
+                               't_depth.1','t_depth.2'),with=F]
+    d
+}
+
+label_composite <- function(d) {
+    label <- ''
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='Exon 19 INDELs' & d$HGVSp_Short.2=='T790M'))  label <- 'EGFR Exon 19 INDELs + T790M'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='T790M' & d$HGVSp_Short.2=='L858R'))  label <- 'EGFR L858R + T790M'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='D761Y' & d$HGVSp_Short.2=='T790M'))  label <- 'EGFR D761Y + T790M'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='G719A' & d$HGVSp_Short.2=='T790M'))  label <- 'EGFR G719A + T790M'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='T790M' & d$HGVSp_Short.2=='C797S'))  label <- 'EGFR T790M + C797S'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='Exon 19 INDELs' & d$HGVSp_Short.2=='C797S'))  label <- 'EGFR Exon 19 INDELs + C797S'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='C797S' & d$HGVSp_Short.2=='L858R'))  label <- 'EGFR L858R + C797S'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='D761Y' & d$HGVSp_Short.2=='C797S'))  label <- 'EGFR D761Y + C797S'
+    if(d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='G719A' & d$HGVSp_Short.2=='C797S'))  label <- 'EGFR G719A + C797S'
+    #if(label=='' & d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='T790M'  | d$HGVSp_Short.2=='T790M'))  label <- 'EGFR Other driver + T790M'
+    #if(label=='' & d$Hugo_Symbol=='EGFR' & (d$HGVSp_Short.1=='C797S'  | d$HGVSp_Short.2=='C797S'))  label <- 'EGFR Other driver + C797S'
+    if(d$Hugo_Symbol=='AR' &   (d$HGVSp_Short.1=='L702H'  & d$HGVSp_Short.2=='H875Y'))  label <- 'AR L702H + H875Y'
+    if(d$Hugo_Symbol=='ALK' &  (d$HGVSp_Short.1=='D1203N' & d$HGVSp_Short.2=='L1196M')) label <- 'ALK D1203N + L1196M'
+    if(d$Hugo_Symbol=='ALK' &  (d$HGVSp_Short.1=='G1202R' & d$HGVSp_Short.2=='L1196M')) label <- 'ALK G1202R + L1196M'
+    if(d$Hugo_Symbol=='BRCA1' &  (d$HGVSp_Short.1=='E1257Gfs*9' & d$HGVSp_Short.2=='N1235Tfs*18')) label <- 'BRCA1 Frame-restoring INDELs'
+
+    if(label=='')  label <- paste(d$Hugo_Symbol,d$HGVSp_Short.1,'+',d$HGVSp_Short.2)
+    d$label <- label
+    d
+}
+
+summarize_composite_with_alleles <- function(d) {
+    n <- length(unique(strtrim(d$Tumor_Sample_Barcode,9)))
+    list(n=n)
+}
+
+
+## load phased data, add phasing by LOH with FACETS
+d <- fread(here('data/data_mutations_phased.txt.gz'))
+d <- d[exclude==F & (putative_resistance_mutation.1==T | putative_resistance_mutation.2==T),]
+reviewed <- fread(here('data/resistance_mutation_phasing_reviewed.txt'))
+reviewed <- reviewed[,c('Tumor_Sample_Barcode','Hugo_Symbol','HGVSp_Short.1','HGVSp_Short.2','phase_reviewed'),with=F]
+d <- merge(d, reviewed[,c('Tumor_Sample_Barcode','Hugo_Symbol','HGVSp_Short.1','HGVSp_Short.2','phase_reviewed'),with=F],
+           by=c('Tumor_Sample_Barcode','Hugo_Symbol','HGVSp_Short.1','HGVSp_Short.2'),all.x=T)
+d[phase_reviewed %in% c('cis','cis*'),phase:=phase_reviewed]
+to_remove <- c(
+               ## bad facets fit in this sample, we can't be sure variants are in the same cell: exclude 
+               which(d$Tumor_Sample_Barcode=='P-0013110-T01-IM5' & d$tm.1=='KIT C809' & d$tm.2=='KIT indel:820-821'),
+               ## this sample has EGFR S768 cis with EGFR T790, but both are in trans with a passenger C775, so I am removing the passenger composite
+               which(d$Tumor_Sample_Barcode=='P-0003923-T01-IM5' & d$tm.1=='EGFR C775' & d$tm.2=='EGFR T790'), 
+               which(d$Tumor_Sample_Barcode=='P-0003923-T01-IM5' & d$tm.1=='EGFR S768' & d$tm.2=='EGFR C775'))
+d <- d[-to_remove,]
+
+## get barplot of resistance mutations per gene
+d$important.1 <- d$hotspot.1==T | d$oncogenic.1 %in% c('Oncogenic','Likely Oncogenic','Predicted Oncogenic') | 
+    (d$Role %in% c('TSG','Oncogene/TSG') & d$truncating.1==T)
+d$important.2 <- d$hotspot.2==T | d$oncogenic.2 %in% c('Oncogenic','Likely Oncogenic','Predicted Oncogenic') | 
+    (d$Role %in% c('TSG','Oncogene/TSG') & d$truncating.2==T)
+
+d$HGVSp_Short.1 <- gsub('p[.]','',d$HGVSp_Short.1)
+d$HGVSp_Short.2 <- gsub('p[.]','',d$HGVSp_Short.2)
+d[Variant_Classification.1 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol=='EGFR' & Exon_Number.1=='19/28',HGVSp_Short.1:=paste('Exon 19 INDELs')]
+d[Variant_Classification.1 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol=='EGFR' & Exon_Number.1=='20/28',HGVSp_Short.1:=paste('Exon 20 INDELs')]
+d[Variant_Classification.2 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol=='EGFR' & Exon_Number.2=='19/28',HGVSp_Short.2:=paste('Exon 19 INDELs')]
+d[Variant_Classification.2 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol=='EGFR' & Exon_Number.2=='20/28',HGVSp_Short.2:=paste('Exon 20 INDELs')]
+d[Variant_Classification.1 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol=='KIT' & Exon_Number.1=='11/21',HGVSp_Short.1:=paste('Exon 11 INDELs')]
+d[Variant_Classification.2 %in% c('In_Frame_Ins','In_Frame_Del') & Hugo_Symbol=='KIT' & Exon_Number.2=='11/21',HGVSp_Short.2:=paste('Exon 11 INDELs')]
+d <- d[phase %in% c('cis','cis*','trans'),]
+d[phase=='cis*',phase:='cis']
+d$id <- paste(strtrim(d$Tumor_Sample_Barcode,9),d$Hugo_Symbol,d$HGVSp_Short.1,d$HGVSp_Short.2,d$phase)
+d <- d[!duplicated(id),]
+
+## prep data for plot
+dd <- extract_cis_trans(d)
+dd <- dd[order(Tumor_Sample_Barcode,Hugo_Symbol),]
+dd$i <- 1:nrow(dd)
+dd <- dd[,label_composite(.SD),by=i]
+toremove <- which(dd$Hugo_Symbol=='EGFR' & (grepl('T790M',dd$label)==F & grepl('C797S',dd$label)==F))
+dd <- dd[-toremove,]
+dd <- dd[Hugo_Symbol!='ESR1',]
+dd[label=='BRCA1 S1253Rfs*10 + N1235Tfs*18',label:='BRCA1 frame-restoring']
+info <- dd[,summarize_composite_with_alleles(.SD),by=c('Hugo_Symbol','label','phase')]
+
+info <- info[phase %in% c('cis','trans'),]
+summarize_gene <- function(info) list(n=sum(info$n)) 
+ns <- info[,summarize_gene(.SD),by=Hugo_Symbol]
+ns <- ns[order(n,decreasing=T),]
+info$Hugo_Symbol <- factor(info$Hugo_Symbol, levels=ns$Hugo_Symbol)
+info <- info[order(info$Hugo_Symbol,info$n,decreasing=F),]
+info$label <- factor(info$label, levels=info$label)
+
+## color scheme
+gene_colors <- c(
+                 (brewer.pal(9,'Purples')[c(4,7)]), ## EGFR
+                 (brewer.pal(9,'Blues')[c(2:9)]), ## KIT
+                 (brewer.pal(9,'Greens')[c(3,5,7)]), ## AR
+                 (brewer.pal(9,'Reds')[c(3,7)]), ## ALK
+                 'pink') ## brca1
+names(gene_colors) <- info$label
+
+## barplot for resistance mutations by gene
+p <- ggplot(info, aes(x=Hugo_Symbol, y=n)) +
+    geom_bar(stat='identity',aes(fill=label)) +
+    theme_std(base_size=16) +
+    scale_y_continuous(expand=c(0,0),breaks=seq(0,14,by=2),limits=c(0,14)) + 
+    scale_fill_manual(values=gene_colors, name='Resistance mutations') +
+    labs(x=NULL,y='N in cis resistance mutations') +
+    theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) 
+p
+```
+
+***
+
+\pagebreak 
+
+# EDF-7
+
+### EDF-7a
+
+```{r panel_edf7a}
+
+# for combined composites across all genes, get the
 # breakdown of associated signatures
-result <- fread(here('data/data_mutations_signature_attribution.txt'))
-result$aetiology <- factor(result$aetiology, levels=names(cols))
+result <- fread(here('data/data_mutations_signature_attribution.txt.gz'))
+result$aetiology <- factor(result$aetiology, 
+                           levels=c('Decomposition failed','Other','Multiple, non-separable','TMZ',
+                                    'POLE','MMR','Smoking/Tobacco','UV','APOBEC','No attributed signature'))
 
 # count number of variants per sample/gene
 count_variants <- function(result) {
@@ -360,13 +903,20 @@ x <- result[,count_variants(.SD),by=c('metamaintype','Tumor_Sample_Barcode','Hug
 x <- x[num_variants > 1,]
 x <- melt(x,id.vars=c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol','num_variants'))
 x <- x[variable!='Decomposition failed',]
-x <- x[value > 0,] ## these are compounds where 1+ variants in a sample/gene are attributed to the given aetiology
+x <- x[value > 0,] ## these are composites where 1+ variants in a sample/gene are attributed to the given aetiology
+x[variable %nin% c('No attributed signature','APOBEC','UV','Smoking/Tobacco'),variable:='Other']
+x$variable <- as.character(x$variable)
+x[variable=='No attributed signature',variable:='Aging or no attributed mutational signature']
+x[variable=='Smoking/Tobacco',variable:='Smoking']
+
+cols <- c('#CCCCCC','#1E78B4','#36A048','#B4D789','black')
+names(cols) <- c('Aging or no attributed mutational signature','APOBEC','UV','Smoking','Other')
+x$variable <- factor(x$variable, levels=names(cols))
 tbl <- table.freq(x$variable)
 names(tbl) <- c('aetiology','N')
 
 coldata <- data.table(col=cols, aetiology=names(cols))
 tbl <- merge(tbl, coldata, by='aetiology', all.x=T)
-tbl <- tbl[aetiology!='Decomposition failed',]
 tbl$aetiology <- paste0(tbl$aetiology,' (',tbl$N,')')
 tbl$prop <- 100*(tbl$N / sum(tbl$N))
 tbl <- tbl[order(prop, decreasing=T),]
@@ -380,27 +930,24 @@ p <- ggplot(tbl,aes(x=1,y=prop)) +
     geom_bar(stat='identity',aes(fill=aetiology)) +
     scale_fill_manual(values=tmpcols, name=paste0('Associated\nsignature (N=',N,')')) +
     theme_std(base_size=16) +
-    scale_y_continuous(expand=c(0,0),limits=c(0,100),breaks=seq(0,100,by=25),position='right') +
-    theme(axis.line.y=element_blank(),axis.ticks.y=element_blank(),axis.text.y=element_blank()) +
-    xlim(-2,4) +
-    labs(x='Etiology',y='Number of mutations',subtitle='Signature attribution of mutations in compounds (IMPACT)') +
-    coord_flip()
-p <- extract_gglegend(p)
-p <- plot_grid(p$plot,p$legend,ncol=1,nrow=2, rel_heights=c(2,3))
+    scale_y_continuous(expand=c(0,0),limits=c(0,100),breaks=seq(0,100,by=25)) +
+    theme(axis.ticks.x=element_blank(),axis.text.x=element_blank(),legend.position='right') +
+    xlim(0,2) +
+    labs(x=NULL,y='Number of all composite mutations')
 p
 
 ```
 
+***
 
 \pagebreak
-### 1H
-```{r panel_h,width=7,height=8}
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# show freq of variants with attributal signature per gene
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+### EDF-7b
 
-result <- fread(here('data/data_mutations_signature_attribution.txt'))
+```{r panel_edf7b,width=7,height=8}
+
+## show freq of variants with attributal signature per gene
+result <- fread(here('data/data_mutations_signature_attribution.txt.gz'))
 result <- result[aetiology_class!='Decomposition failed',]
 
 get_attributed_signatures <- function(result) {
@@ -426,7 +973,7 @@ get_attributed_signatures <- function(result) {
          tmz=tmz)
 }
 
-## for singletons and compounds, check if any are assigned to smoking/uv/apobec
+## for singletons and composites, check if any are assigned to smoking/uv/apobec
 x <- result[,get_attributed_signatures(.SD),by=c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol')]
 x <- x[num_variants > 1,]
 x <- melt(x,id.vars=c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol','num_variants'))
@@ -442,11 +989,17 @@ x[variable=='tmz',variable:='TMZ']
 x[variable=='other',variable:='Other']
 x[variable=='multiple',variable:='Multiple, non-separable']
 x[variable=='none',variable:='No attributed signature']
-x$variable <- factor(x$variable, levels=rev(names(cols))[1:9])
 
-## subset for recurrently compound-mutated genes
+x[variable %nin% c('No attributed signature','APOBEC','UV','Smoking/Tobacco'),variable:='Other']
+x[variable=='No attributed signature',variable:='Aging or no attributed mutational signature']
+x[variable=='Smoking/Tobacco',variable:='Smoking']
+
+cols <- c('#CCCCCC','#1E78B4','#36A048','#B4D789','black')
+names(cols) <- c('Aging or no attributed mutational signature','APOBEC','UV','Smoking','Other')
+x$variable <- factor(x$variable, levels=rev(names(cols)))
+
+## subset for recurrently composite-mutated genes
 tbl <- table.freq(x$Hugo_Symbol)
-#recurrent_genes <- tbl$value[tbl$N >= 20]
 gene_enrichment2 <- fread(here('data/gene_enrichment_precalculated.txt'))
 recurrent_genes <- gene_enrichment2$Hugo_Symbol[gene_enrichment2$q_enriched < 0.01]
 x <- x[Hugo_Symbol %in% recurrent_genes,]
@@ -454,126 +1007,24 @@ tbl <- table.freq(x$Hugo_Symbol)
 
 xm <- as.data.frame.matrix(xtabs(~Hugo_Symbol + variable,data=x))
 xm <- cbind(Hugo_Symbol=rownames(xm), adt(xm))
-cnt_associated <- rowSums(xm[,3:ncol(xm)])
+cnt_associated <- rowSums(xm[,2:5])
 cnt_overall <- rowSums(xm[,2:ncol(xm),with=F])
 pct_associated <- data.table(Hugo_Symbol=xm$Hugo_Symbol,value=cnt_overall,prop_associated=paste0(round(100*(cnt_associated / cnt_overall),1)))
 xm <- adt(melt(xm,id.vars='Hugo_Symbol'))
-xm$variable <- factor(xm$variable, levels=rev(names(cols)))
-xm$Hugo_Symbol <- factor(xm$Hugo_Symbol, levels=rev(tbl$value))
+xm$variable <- factor(xm$variable, levels=(names(cols)))
+xm$Hugo_Symbol <- factor(xm$Hugo_Symbol, levels=(tbl$value))
 
-## plot gene-level rate of compounds associated with mutation signatures
+## plot gene-level rate of composites associated with mutation signatures
 p <- ggplot(xm,aes(x=Hugo_Symbol,y=value)) +
     geom_bar(stat='identity',aes(fill=variable),width=0.8) +
-    geom_text(data=pct_associated, aes(x=Hugo_Symbol,y=value,label=prop_associated),hjust=-0.2,vjust=0.5,size=3) +
-    scale_fill_manual(values=cols, name='Aetiology of 1+\nvariants in compound') +
+    scale_fill_manual(values=cols, name='Associated signature') +
     scale_y_continuous(expand=c(0,0)) +
-    coord_flip() +
-    theme_std(base_size=12) +
-    labs(x='Genes enriched for compound mutations',y='Number of compound mutations',
-         subtitle='Compound mutations with associated with mutational signatures')
+    theme_std(base_size=16) +
+    theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5)) +
+    labs(x='Genes enriched for composite mutations',y='N composite mutations')
+p <- extract_gglegend(p)
+p <- plot_grid(p$plot, p$legend, ncol=1, nrow=2, rel_heights=c(3,2))
 p
 ```
 
-
-\pagebreak
-### 1I
-```{r panel_i,width=6,height=11}
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# show freq of variants with attributal signature per residue
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-result <- fread(here('data/data_mutations_signature_attribution.txt'))
-result <- result[aetiology_class!='Decomposition failed',]
-
-## for singletons and compounds, check if any are assigned to smoking/uv/apobec
-residue_enrichment <- fread(here('data/residue_enrichment_precalculated.txt'))
-residue_hotspots <- residue_enrichment$query_mutation[residue_enrichment$q.value.enriched < 0.01]
-result$id <- paste(result$Hugo_Symbol, gsub('p[.]','',result$HGVSp_Short))
-result$nchar <- nchar(result$id)
-result[Hugo_Symbol!='TERT' & Variant_Type=='SNP',id:=substr(id,1,(nchar-1))]
-result[Variant_Type!='SNP',id:=NA]
-result$hotspot <- result$id %in% residue_hotspots
-result$tsb_gene <- paste(result$Tumor_Sample_Barcode,result$Hugo_Symbol)
-tbl <- table.freq(result$tsb_gene)
-result$compound <- result$tsb_gene %in% tbl$value[tbl$N > 1]
-compound_hotspots <- result[hotspot==T & compound==T,]
-
-x2 <- compound_hotspots[,get_attributed_signatures(.SD),by=c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol','id')]
-x2[,num_variants:=NULL]
-
-## annotate residues with hotspots for compounds here!
-x2 <- melt(x2,id.vars=c('metamaintype','Tumor_Sample_Barcode','Hugo_Symbol','id'))
-x2$variable <- as.character(x2$variable)
-x2[variable=='apobec',variable:='APOBEC']
-x2[variable=='uv',variable:='UV']
-x2[variable=='smoking',variable:='Smoking/Tobacco']
-x2[variable=='mmr',variable:='MMR']
-x2[variable=='pol',variable:='POLE']
-x2[variable=='tmz',variable:='TMZ']
-x2[variable=='other',variable:='Other']
-x2[variable=='multiple',variable:='Multiple, non-separable']
-x2[variable=='none',variable:='No attributed signature']
-x2$variable <- factor(x2$variable, levels=rev(names(cols))[1:9])
-x2 <- x2[value==T,]
-tbl <- table.freq(x2$id)
-tbl$Hugo_Symbol <- sapply(tbl$value,function(s) strsplit(s,' ')[[1]][1])
-tbl <- tbl[order(Hugo_Symbol,N,decreasing=F)]
-
-x2m <- as.data.frame.matrix(xtabs(~id + variable,data=x2))
-x2m <- cbind(id=rownames(x2m),adt(x2m))
-cnt_associated <- rowSums(x2m[,3:ncol(x2m),with=F])
-cnt_overall <- rowSums(x2m[,2:ncol(x2m),with=F])
-pct_associated <- data.table(id=x2m$id,value=cnt_overall,prop_associated=paste0(round(100*(cnt_associated / cnt_overall),1)))
-x2m <- adt(melt(x2m,id.vars='id'))
-#x2m$variable <- factor(x2m$variable, levels=rev(names(cols)))
-x2m$id <- factor(x2m$id, levels=rev(tbl$value))
-
-p <- ggplot(x2m,aes(x=id,y=value)) +
-    geom_bar(stat='identity',aes(fill=variable),width=0.8) +
-    geom_text(data=pct_associated, aes(x=id,y=value,label=prop_associated),hjust=-0.2,vjust=0.5,size=2) +
-    scale_fill_manual(values=cols, name='Associated etiology') +
-    scale_y_continuous(expand=c(0,0)) +
-    coord_flip() +
-    theme_std(base_size=10) +
-    labs(x=NULL,y='Number of compound mutations',subtitle='Compound mutation SNP hotspots associated with mutational signatures')
-p
-```
-
-\pagebreak
-### unk1
-
-```{r panel_edf_unk1}
-
-## load data from permutations
-perm <- readRDS(here::here('data/observed_vs_expected_composites_impact_precalculated.rds'))
-obs <- perm$obs_all
-exp <- median(perm$dat_all$prop)
-
-## plot results (figure 1c in paper)
-perm$dat$group <- 'All samples'
-plot_dat <- perm$dat
-plot_dat$data <- 'Randomly shuffled'
-plot_dat$prop <- plot_dat$prop * 100
-obs_dat <- data.table(group='All samples')
-obs_dat$prop <- perm$obs*100
-obs_dat$data <- 'Observed'
-pd <- rbind(plot_dat, obs_dat, fill=T)
-x <- break_axis(pd$prop,maxlower=16,minupper=22,lowerticksize=1,upperticksize=1,ratio_lower_to_upper=0.5)
-pd$prop2 <- x$newy
-expected_color <- c('black','red')
-names(expected_color) <- c('Randomly shuffled','Observed')
-
-p <- ggplot(pd,aes(x=prop2)) +
-    geom_histogram(binwidth=0.1,aes(fill=data),color='white',size=0.2) +
-    geom_vline(data=pd[data=='Observed',],aes(xintercept=prop2),color='red',linetype='dashed',size=0.5) +
-    scale_fill_manual(values=expected_color,name=NULL) +
-    scale_x_continuous(breaks=c(x$breaks,18), labels=c(x$labels,24), limits=c(13.8,18.1)) +
-    scale_y_continuous(expand=c(0,0)) +
-    labs(x='Percentage',y='100,000 Random shuffles',title='EDF-unk') +
-    theme_std(base_size=14) +
-    theme(legend.position='none')
-p
-
-```
 

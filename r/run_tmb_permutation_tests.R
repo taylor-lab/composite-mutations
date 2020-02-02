@@ -1,6 +1,3 @@
-## % of tumors with any composite: expected vs observed
-## fig 1b/c of paper; also extended with tcga permutation
-## also extended figure-1 (expected vs observed at each TMB)
 
 source(here::here('r/prerequisites.R'))
 cpus <- cpu_prompt()
