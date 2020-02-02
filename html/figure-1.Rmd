@@ -368,7 +368,7 @@ summarize_gene <- function(d) {
 res <- dd[,summarize_gene(.SD),by=c('Role')]
 role_order <- c('Oncogene','TSG')
 pval <- fisher.test(res[,(2:3),with=F])$p.value
-pval_label <- paste0('P=',pval)
+pval_label <- paste0('P~',pval)
 
 res$Role <- factor(res$Role, levels=role_order)
 res <- res[order(Role),]

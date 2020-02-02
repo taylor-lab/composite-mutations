@@ -222,75 +222,82 @@ p
 
 ```{r panel_2c, fig.width=6, fig.height=6}
 
-## load MAF, subset for hotspot SNPs among valid samples
+
+### load MAF, subset for hotspot SNPs among valid samples
 d <- d_mutations
 d <- d[exclude==F & putative_resistance_mutation==F,]
 dd <- d[Variant_Classification %in% 'Missense_Mutation',]
 dd[hotspot_class=='3d',hotspot:=F]
 dd[hotspot_class=='3d',hotspot_class:='']
 
-## annotate if the sample-gene is singleton or multiplet
+### annotate if the sample-gene is singleton or composite
 dd$id <- paste(dd$Tumor_Sample_Barcode,dd$Hugo_Symbol)
 tbl <- table.freq(dd$id)
 singleton <- tbl$value[tbl$N==1]
 composite <- tbl$value[tbl$N>1]
 dd$composite <- dd$id %in% composite
-
-## get total number of singletons and composite mutations
+dd$PATIENT_ID <- strtrim(dd$Tumor_Sample_Barcode,9)
 dd$pid_gene <- paste(dd$PATIENT_ID,dd$Hugo_Symbol)
 total_number_singleton_mutations <- length(unique(dd$pid_gene[dd$composite==F]))
 total_number_composite_mutations <- length(unique(dd$pid_gene[dd$composite==T]))
 total_number_mutations <- length(unique(dd$pid_gene))
 
-## for each hotspot, count the numnber of mutant, singleton and multiplet samples
-summarize_individual_hotspot <- function(query.hotspot,d) {
-    ## count affected singleton/multiplet samples
-    mutant_samples <- sortunique(d$Tumor_Sample_Barcode[d$tm %in% query.hotspot])
-    singleton_samples <- sortunique(d$Tumor_Sample_Barcode[d$tm %in% query.hotspot & d$composite==F])
-    multiplet_samples <- sortunique(d$Tumor_Sample_Barcode[d$tm %in% query.hotspot & d$composite==T])
+### for each hotspot, count the number of mutant, singleton and composite samples
+summarize_individual_hotspot <- function(d) {
+    ### count affected singleton/composite samples
+    mutant_samples <- sortunique(d$Tumor_Sample_Barcode)
+    singleton_samples <- sortunique(d$Tumor_Sample_Barcode[d$composite==F])
+    composite_samples <- sortunique(d$Tumor_Sample_Barcode[d$composite==T])
 
-    ## don't overcount patients with 2+ samples
+    ### don't overcount patients with 2+ samples
     mutant_samples <- unique(strtrim(mutant_samples,9))
     singleton_samples <- unique(strtrim(singleton_samples,9))
-    multiplet_samples <- unique(strtrim(multiplet_samples,9))
+    composite_samples <- unique(strtrim(composite_samples,9))
 
     n.mutant <- length(mutant_samples)
     n.singletons <- length(singleton_samples)
-    n.multiplets <- length(multiplet_samples)
-    list(hotspot=query.hotspot,n.mutant=n.mutant,n.singletons=n.singletons,n.multiplets=n.multiplets)
+    n.composites <- length(composite_samples)
+    list(n.mutant=n.mutant,n.singletons=n.singletons,n.composites=n.composites)
 }
+
 hotspots <- sortunique(dd$hotspotid)
 hotspots <- hotspots[hotspots!='']
-message('Counting singleton/composite samples at each hotspot (will take some time) ...')
-l <- lapply(hotspots, summarize_individual_hotspot, dd)
-message('Done!')
-ll <- rbindlist(l)
+ll <- dd[hotspotid!='',summarize_individual_hotspot(.SD),by=hotspotid]
 ll <- ll[order(n.mutant,decreasing=T),]
 ll$x.order <- 1:nrow(ll)
-
-## get total number of singleton and multiplet mutations (this includes among non-hotspots)
 ll$p.singletons <- cumsum(ll$n.singletons / total_number_singleton_mutations)
-ll$p.multiplets <- cumsum(ll$n.multiplets / total_number_composite_mutations)
+ll$p.composites <- cumsum(ll$n.composites / total_number_composite_mutations)
 ll$p.mutant <- cumsum(ll$n.mutant / total_number_mutations)
+setnames(ll,'hotspotid','hotspot')
+
+overall_prob_composite_mutation_has_hotspot <- max(ll$p.composites)
+overall_prob_singleton_mutation_has_hotspot <- max(ll$p.singleton)
+
+### Calculate P-value:
+singletons_summary <- data.table(x=sum(ll$n.singletons),n=total_number_singleton_mutations,class='Singletons')
+composites_summary <- data.table(x=sum(ll$n.composites),n=total_number_composite_mutations,class='Composite mutations')
+summary <- rbind(singletons_summary, composites_summary)
+pval <- prop.test(summary$x, summary$n)$p.value
+pval_lab <- paste0('P~',prettyNum(pval,digits=1))
+
 
 ## prep data for plot
-toadd <- data.table(hotspot='none',n.mutant=NA,n.singletons=NA,n.multiplets=NA,x.order=0,p.mutant=0,p.singletons=0,p.multiplets=0)
+toadd <- data.table(hotspot='none',n.mutant=NA,n.singletons=NA,n.composites=NA,x.order=0,p.mutant=0,p.singletons=0,p.composites=0)
 pdat <- rbind(toadd,ll)
-pdat <- melt(pdat[,c('hotspot','x.order','p.singletons','p.multiplets'),with=F],id.var=c('x.order','hotspot'))
+pdat <- melt(pdat[,c('hotspot','x.order','p.singletons','p.composites'),with=F],id.var=c('x.order','hotspot'))
 pdat$Class <- ''
 pdat[variable=='p.singletons',Class:='Singleton']
-pdat[variable=='p.multiplets',Class:='Composite']
+pdat[variable=='p.composites',Class:='Composite']
 pdat$Class <- factor(pdat$Class,levels=c('Singleton','Composite'))
 
 cols <- c('#979797','#1B89AD')
 names(cols) <- levels(pdat$Class)
 
-pval <- wilcox.test(pdat$value[pdat$Class=='Singleton'],pdat$value[pdat$Class=='Composite'])$p.value
-pval_lab <- paste0('P=',prettyNum(pval,digits=1))
-
+singletons_summary <- data.table(x=sum(ll$n.singletons),n=total_number_singleton_mutations,class='Singletons')
+composites_summary <- data.table(x=sum(ll$n.composites),n=total_number_composite_mutations,class='Composite mutations')
+summary <- rbind(singletons_summary, composites_summary)
 max_prop_sing <- tail(pdat$value[pdat$Class=='Singleton'],1)
 max_prop_comp <- tail(pdat$value[pdat$Class=='Composite'],1)
-
 
 ## plot
 p1 <- ggplot(pdat,aes(x=x.order)) +
@@ -311,7 +318,7 @@ dd <- d[Variant_Classification %in% 'Missense_Mutation',]
 dd[hotspot_class=='3d',hotspot:=F]
 dd[hotspot_class=='3d',hotspot_class:='']
 
-## annotate if the sample-gene is singleton or multiplet
+## annotate if the sample-gene is singleton or composite
 dd$id <- paste(dd$Tumor_Sample_Barcode,dd$Hugo_Symbol)
 tbl <- table.freq(dd$id)
 singleton <- tbl$value[tbl$N==1]
@@ -336,9 +343,6 @@ ci$upper <- 100*ci$upper
 pval <- prop.test(x,n,alternative='two.sided')$p.value
 pval <- paste0('P=',prettyNum(pval,digits=1))
 
-#values <- paste0('prop=',prettyNum(ci$mean,digits=3), paste0(', 95%CI: [',prettyNum(ci$lower,digits=3),'-',prettyNum(ci$upper,digits=3),']'))
-#paste(c('Composites:','Singletons:'),values)
-
 ## to force the inset plot range within 25-40 we are will offset the data here by 25
 ## then adjust the labels in plot accordingly
 ci[,mean:=mean-25]
@@ -348,6 +352,7 @@ ci[,upper:=upper-25]
 ## plot
 p2 <- ggplot(ci,aes(x=mutation, y=mean)) +
     geom_bar(stat='identity',aes(fill=mutation)) + 
+    geom_signif(comparison=list(c('Singleton','Composite')),annotation=pval,y_position=37-25) +
     scale_fill_manual(values=cols,name=NULL) + 
     geom_signif(comparison=list(c('composite','singleton')),annotation=pval,y_position=(37.5-26)) + 
     geom_errorbar(aes(min=lower,max=mean),color='white',width=0) +
