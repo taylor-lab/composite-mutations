@@ -54,10 +54,14 @@ R -e "rmarkdown::render('html/figure-1.Rmd', output_file = 'figure-1.html')"
 R -e "rmarkdown::render('html/figure-2.Rmd', output_file = 'figure-2.html')"
 R -e "rmarkdown::render('html/figure-3.Rmd', output_file = 'figure-3.html')"
 R -e "rmarkdown::render('html/figure-4.Rmd', output_file = 'figure-4.html')"
+```
+
+External Data Figures (EDF) can similarly be generated:
+```shell
 R -e "rmarkdown::render('html/figure-extended.Rmd', output_file = 'figure-extended.html')"
 ```
 
-An HTML file containing values references in the main text can also be generated:
+To generate an HTML file containing values references in the main text:
 ```shell
 R -e "rmarkdown::render('html/text_values.Rmd', output_file = 'text_values.html')"
 ```
