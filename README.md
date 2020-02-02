@@ -33,6 +33,10 @@ Rscript r/run_gene_enrichment_test.R
 ## generate data/residue_enrichment.txt
 Rscript r/run_residue_enrichment_test.R
 
+## generate data/observed_vs_expected_compounds_impact.rds; data/observed_vs_expected_compounds_tcga.rds
+## warning: this can take hours to finish
+Rscript r/run_cohort_permutation_tests.R
+
 ## generate data/observed_vs_expected_composites_per_tmb_impact.rds
 ## warning: this can take hours to finish
 Rscript r/run_tmb_permutation_tests.R
@@ -50,6 +54,7 @@ R -e "rmarkdown::render('html/figure-1.Rmd', output_file = 'figure-1.html')"
 R -e "rmarkdown::render('html/figure-2.Rmd', output_file = 'figure-2.html')"
 R -e "rmarkdown::render('html/figure-3.Rmd', output_file = 'figure-3.html')"
 R -e "rmarkdown::render('html/figure-4.Rmd', output_file = 'figure-4.html')"
+R -e "rmarkdown::render('html/figure-extended.Rmd', output_file = 'figure-extended.html')"
 ```
 
 An HTML file containing values references in the main text can also be generated:
