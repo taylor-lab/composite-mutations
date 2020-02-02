@@ -108,7 +108,7 @@ obs_label <- paste0(prettyNum(obs*100,digits=3),'%')
 
 p <- ggplot(pd,aes(x=prop2)) +
     geom_histogram(binwidth=0.1,aes(fill=data),color='white',size=0.2) +    
-    geom_vline(data=pd[data=='Observed',],aes(xintercept=prop2),color='red',linetype='dashed',size=1) +
+    geom_vline(data=pd[data=='Observed',],aes(xintercept=prop2),color='red',linetype='dashed',size=0.2) +
     geom_text(data=pd[min(which(data=='Observed')),],x=17.5,label=obs_label, y=3000,color='red',size=5) +
     scale_fill_manual(values=expected_color,name=NULL) +
     scale_x_continuous(breaks=c(x$breaks), labels=c(x$labels), limits=c(13.0,19.1)) +

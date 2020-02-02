@@ -16,7 +16,7 @@ source(here::here('r/prerequisites.R'))
 # Rebuttal-only A
 ```{r panel_a, width=6.5, height=7} 
 
-d <- fread(here('data/rebuttal_only/data_mutations_phased_all.txt'))
+d <- fread(here('data/rebuttal_only/data_mutations_phased_all.txt.gz'))
 d <- d[exclude==F & putative_resistance_mutation.1==F & putative_resistance_mutation.2==F,]
 d_ns <- d[Variant_Classification.1!='Silent' & Variant_Classification.2!='Silent',]
 d_ns$group <- 'Nonsyn.'
@@ -910,8 +910,8 @@ p
 ```{r panel_k, width=8, height=5} 
 
 
-d <- fread(here('data/data_mutations_tcga.txt')) 
-clin <- fread(here('data/data_clinical_tcga.txt'))
+d <- fread(here('data/data_mutations_tcga.txt.gz')) 
+clin <- fread(here('data/data_clinical_tcga.txt.gz'))
 samples <- clin$Tumor_Sample_Barcode[clin$DISEASE=='SKCM']
 d <- d[Tumor_Sample_Barcode %in% samples,]
 
@@ -942,7 +942,7 @@ tabulate <- function(d, tfbs) {
     x
 }
 
-active_tfbs_coding <- fread(here('data/rebuttal_only/tfbs_skcm_dhs_coding.txt'))
+active_tfbs_coding <- fread(here('data/rebuttal_only/tfbs_skcm_dhs_coding.txt')))
 active_tfbs_coding <- active_tfbs_coding[,c('chr','tfbs_start','tfbs_end','tfbs_id'),with=F]
 setkey(active_tfbs_coding,'chr','tfbs_start','tfbs_end')
 
