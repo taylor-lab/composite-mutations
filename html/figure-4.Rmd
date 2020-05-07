@@ -137,207 +137,13 @@ p
 
 # Fig 4b
 
-```{r, panel_4b, fig.width=6,fig.height=4}
-
-tert <- d_mutations
-tert <- tert[Hugo_Symbol=='TERT' & Variant_Classification=='TERT promoter' & exclude==F,]
-get_tert_mutation <- function(Start_Position,Reference_Allele,Tumor_Seq_Allele2) {
-    Amino_Acid_Position <- as.integer(substr(Start_Position,5,7))
-    Reference_Allele <- toupper(Reference_Allele)
-    Tumor_Seq_Allele2 <- toupper(Tumor_Seq_Allele2)
-    mutation <- paste0(Amino_Acid_Position,Reference_Allele,'>',Tumor_Seq_Allele2)
-    mutation
-}
-tert$mutation <- get_tert_mutation(tert$Start_Position, tert$Reference_Allele, tert$Tumor_Seq_Allele2)
-mutations <- unique(tert$mutation)
-
-getN <- function(query.mutation, d) {
-    mutant_samples <- d$Tumor_Sample_Barcode[d$mutation==query.mutation]
-    samples_with_mutation <- d$Tumor_Sample_Barcode[d$Tumor_Sample_Barcode %in% mutant_samples]
-    tbl <- table.freq(samples_with_mutation)
-    composite_samples <- tbl$value[tbl$N > 1]
-    singleton_samples <- tbl$value[tbl$N == 1]
-    n_composite <- length(unique(strtrim(composite_samples, 9)))
-    n_singleton <- length(unique(strtrim(singleton_samples, 9)))
-    n_overall <- length(unique(strtrim(tbl$value, 9)))
-    list(mutation=query.mutation,n_composite=n_composite, n_singleton=n_singleton, n_overall=n_overall)
-}
-l <- lapply(mutations, getN, tert)
-l <- rbindlist(l)
-
-info <- l[order(n_overall,decreasing=T),]
-info <- info[n_overall >= 5,]
-yinfo <- break_axis(info$n_overall,maxlower=60,minupper=500,lowerticksize=20,upperticksize=500,ratio_lower_to_upper=0.5)
-info$y_overall <- yinfo$newy
-info$y_composite <- info$y_overall * info$n_composite/info$n_overall
-info$y_singleton <- info$y_overall * info$n_singleton/info$n_overall
-infoM <- melt(info[,c('mutation','y_composite','y_singleton'),with=F], id.vars=c('mutation'))
-infoM[variable=='y_composite',variable:='Composite']
-infoM[variable=='y_singleton',variable:='Singleton']
-infoM$variable <- factor(infoM$variable, levels=c('Singleton','Composite'))
-infoM$mutation <- factor(infoM$mutation, levels=rev(info$mutation))
-info$label <- paste0(round(info$n_composite / info$n_overall,3)*100,'%')
-labels <- info[,c('mutation','label','y_composite'),with=F]
-toremove <- which(yinfo$labels %in% c(500,1500,2500))
-yinfo$newy <- yinfo$newy[-toremove]
-yinfo$breaks <- yinfo$breaks[-toremove]
-yinfo$labels <- yinfo$labels[-toremove]
-yinfo$limits <- yinfo$limits[-toremove]
-
-cols <- c('#EF7A63','#70C1DF')
-names(cols) <- c('Composite','Singleton')
-p1 <- ggplot(infoM, aes(x=mutation, y=value)) +
-    geom_bar(stat='identity',fill='black') +
-    scale_y_continuous(breaks=yinfo$breaks,labels=yinfo$labels,limits=yinfo$limits,expand=c(0,0),position='right') +
-    theme_std(base_size=14) +
-    labs(x=NULL,y='Number of patients') + 
-    coord_flip()
-p1 <- extract_gglegend(p1)
-
-## format data for right plot showing the proportion of composite mutants including each mutation
-## to expand the view in the lower proportions, we will plot from 0-25%, and then break axis to 100%
-info2 <- info
-info2$Composite <- info2$n_composite / info2$n_overall
-info2$Singleton <- 1 - info2$Composite
-info2 <- info2[,c('mutation','Composite','Singleton'),with=F]
-info2 <- melt(info2, id.vars='mutation')
-info2$mutation <- factor(info2$mutation, levels=rev(info$mutation))
-info2$variable <- factor(info2$variable, levels=c('Singleton','Composite'))
-info2[value >= 0.25,value:=value-0.75]
-
-p2 <- ggplot(info2, aes(x=mutation, y=value)) +
-    geom_bar(stat='identity',aes(fill=variable)) + 
-    scale_y_continuous(expand=c(0,0),limits=c(0,0.27),breaks=c(0,0.1,0.25),labels=c(0,0.1,1),position='left') + 
-    scale_fill_manual(values=cols,name=NULL) + 
-    theme_std(base_size=14) +
-    theme(axis.text.y=element_blank(),axis.ticks.y=element_blank()) + 
-    labs(x=NULL,y='Fraction',title='') + 
-    coord_flip()
-p2 <- extract_gglegend(p2)
-p <- plot_grid(p1$plot,p2$plot,nrow=1,ncol=2,align='h',rel_widths=c(4,1))
-p <- plot_grid(p,p2$legend,nrow=2,ncol=1,rel_heights=c(4,1))
-p
-
-```
-
-***
-
-\pagebreak
-
-# Fig 4c
-
-```{r, panel_4c, fig.width=6,fig.height=4}
-
-all_samples <- d_clinical$Tumor_Sample_Barcode[d_clinical$exclude==F]
-alleles <- info$mutation
-x <- adt(expand.grid(m1=alleles, m2=alleles, stringsAsFactors=F))
-
-test_comut <- function(i, x, d) {
-    out <- x[i,]
-    m1_samples <- d$Tumor_Sample_Barcode[d$mutation==out$m1]
-    m2_samples <- d$Tumor_Sample_Barcode[d$mutation==out$m2]
-    samples_AB <- all_samples[all_samples %nin% c(m1_samples, m2_samples)]
-    samples_aB <- m1_samples[m1_samples %nin% m2_samples]
-    samples_Ab <- m2_samples[m2_samples %nin% m1_samples]
-    samples_ab <- intersect(m1_samples, m2_samples)
-    AB <- length(unique(strsplit(samples_AB,9)))
-    aB <- length(unique(strsplit(samples_aB,9)))
-    Ab <- length(unique(strsplit(samples_Ab,9)))
-    ab <- length(unique(strsplit(samples_ab,9)))
-    m <- rbind(c(AB,aB),c(Ab,ab))
-    tst <- fisher.test(m, alternative='two.sided')
-    out$AB <- AB; out$aB <- aB; out$Ab <- Ab; out$ab <- ab
-    out$OR <- as.numeric(tst$estimate)
-    out$p <- as.numeric(tst$p.value)
-    out
-}
-
-
-l <- lapply(1:nrow(x), test_comut, x, tert)
-l <- rbindlist(l)
-l$m1 <- factor(l$m1, levels=alleles)
-l$m2 <- factor(l$m2, levels=alleles)
-l$label <- l$ab
-l$direction <- 'not significant'
-l[p < 0.01 & OR < 1,direction:='mutually exclusive']
-l[p < 0.01 & OR > 1,direction:='co-occurring']
-l[p >= 0.01 & ab == 0, label:=NA]
-l$logOR <- log2(l$OR)
-
-m_ab <- reshape(l[,c('m1','m2','ab'),with=F],idvar='m1',timevar='m2',direction='wide')
-rows <- m_ab$m1
-m_ab[,m1:=NULL]
-m_ab <- as.matrix(m_ab)
-rownames(m_ab) <- rows
-colnames(m_ab) <- rows
-m_ab <- m_ab[alleles, alleles]
-m_ab[upper.tri(m_ab,diag=T)] <- NA
-mm_ab <- melt(m_ab)
-names(mm_ab) <- c('m1','m2','ab')
-
-m_label <- reshape(l[,c('m1','m2','label'),with=F],idvar='m1',timevar='m2',direction='wide')
-rows <- m_label$m1
-m_label[,m1:=NULL]
-m_label <- as.matrix(m_label)
-rownames(m_label) <- rows
-colnames(m_label) <- rows
-m_label <- m_label[alleles, alleles]
-m_label[upper.tri(m_label,diag=T)] <- NA
-mm_label <- melt(m_label)
-names(mm_label) <- c('m1','m2','label')
-
-m_direction <- reshape(l[,c('m1','m2','direction'),with=F],idvar='m1',timevar='m2',direction='wide')
-rows <- m_direction$m1
-m_direction[,m1:=NULL]
-m_direction <- as.matrix(m_direction)
-rownames(m_direction) <- rows
-colnames(m_direction) <- rows
-m_direction <- m_direction[alleles, alleles]
-m_direction[upper.tri(m_direction,diag=T)] <- NA
-mm_direction <- melt(m_direction)
-names(mm_direction) <- c('m1','m2','direction')
-
-mm <- adt(mm_ab)
-mm$label <- mm_label$label
-mm$direction <- mm_direction$direction
-mm <- mm[m1 %nin% '228G>A' & m2 %nin% '205G>A']
-mm$m1 <- factor(mm$m1, levels=alleles)
-mm$m2 <- factor(mm$m2, levels=alleles)
-mm[is.na(direction),direction:='not significant']
-
-box_colors <- c('#EF7A63','black','white')
-names(box_colors) <- c('mutually exclusive','co-occurring','not significant')
-p <- ggplot(mm, aes(x=m2, y=m1)) +
-    geom_tile(aes(fill=ab,color=direction),size=1,width=0.95,height=0.95) +
-    scale_fill_gradient(low='#F1F1F2',high='steelblue',na.value='white',name='N') +
-    scale_color_manual(values=box_colors,name=NULL) + 
-    scale_x_discrete(expand=c(0,0)) +
-    scale_y_discrete(expand=c(0,0)) +
-    geom_text(aes(label=label)) + 
-    theme_std(base_size=14) +
-    theme(
-        axis.text.x=element_text(angle=90,hjust=1,vjust=0.5),
-        axis.ticks.x=element_blank(),
-        axis.line.x=element_blank(),
-        axis.ticks.y=element_blank(),
-        axis.line.y=element_blank()) + 
-    labs(x=NULL, y=NULL) 
-p
-
-```
-
-***
-
-\pagebreak
-
-# Fig 4d
-
-```{r, panel_4d}
+```{r, panel_4b}
 
 ## load experimental data
 d <- fread(here('data/tert_rlu_luciferase.txt'))
 setnames(d,'cell line','line')
 d <- melt(d,id.vars=c('Replicate','line'))
+d$id <- paste(d$variable,d$line)
 
 ## calculate significance between alleles (controlling for cell line)
 test <- function(allele1, allele2, d) {
@@ -357,6 +163,9 @@ x6 <- test('228C>T','228C>T + 205C>T',d)
 x7 <- test('250C>T','250C>T + 205C>T',d)
 out <- rbind(x1,x2,x3,x4,x5,x6,x7)
 out$p.anova <- paste0('p=',prettyNum(out$p.anova,digits=1))
+out$id1 <- paste(out$allele1,'Sk-Mel2')
+out$id2 <- paste(out$allele2,'Sk-Mel2')
+
 
 ## collapse replicates by mean +/- sem
 collapse_replicates <- function(d) {
@@ -365,14 +174,14 @@ collapse_replicates <- function(d) {
     sem <- sd(d$value)/sqrt(n)
     list(mu=mu,sem=sem)
 }
-d <- d[,collapse_replicates(.SD),by=c('variable','line')]
-d$lwr <- d$mu - d$sem
-d$upr <- d$mu + d$sem
-d$id <- paste0(d$variable,' ',d$line)
-d$line <- factor(d$line, levels=c('A375','Sk-Mel2','Sk-Mel30'))
-d <- d[order(variable,line)]
-d$id <- factor(d$id, levels=d$id)
-globalmax <- max(d$upr)
+d2 <- d[,collapse_replicates(.SD),by=c('variable','line')]
+d2$lwr <- d2$mu - d2$sem
+d2$upr <- d2$mu + d2$sem
+d2$id <- paste0(d2$variable,' ',d2$line)
+d2$line <- factor(d2$line, levels=c('A375','Sk-Mel2','Sk-Mel30'))
+d2 <- d2[order(variable,line)]
+d2$id <- factor(d2$id, levels=d2$id)
+d$id <- factor(d$id, levels=d2$id)
 
 ## hardcode the positions for the lines comparing significance
 out2 <- out
@@ -388,22 +197,21 @@ line_colors <- c('#B7DBEB','#70C1DF','#1A89AD')
 names(line_colors) <- levels(d$line)
 
 ## make plot
-p <- ggplot(d, aes(x=variable, y=mu, ymin=lwr, ymax=upr, fill=line)) +
-    geom_bar      (position=position_dodge(), aes(y=mu), stat="identity") +
-    geom_errorbar (position=position_dodge(width=0.9), width=0, colour="black") +
+p <- ggplot() +
+    geom_bar(data=d2, aes(x=id,y=mu,fill=line), stat="identity") +
+    geom_errorbar(data=d2,aes(x=id,ymin=lwr,ymax=upr),width=0, colour="black") +
+    geom_point(data=d,aes(x=id,y=value),pch=19,position=position_jitter(0.1)) +
     scale_fill_manual(values=line_colors, name=NULL) +
     theme_std(base_size=14) +
-    theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1),axis.line.y=element_blank()) +
+    theme(axis.text.x=element_text(angle=45,hjust=1,vjust=1)) + 
     scale_y_continuous(expand=c(0,0), breaks=seq(0,350,by=50),limits=c(0,550)) +
     labs(x='TERT promoter allele',y='RLU Luciferase') 
-    for(i in 1:nrow(out2)) p <- p + geom_signif(comparisons=list(c(out2$allele1[i],out2$allele2[i])), y_position = out2$ypos[i] + 5,
-                                             annotations=out2$p.anova[i],family='ArialMT',size=0.5,tip_length=0)
+    for(i in 1:nrow(out2)) p <- p + geom_signif(comparisons=list(c(out2$id1[i],out2$id2[i])), 
+                                                y_position = out2$ypos[i] + 5,
+                                                annotations=out2$p.anova[i],family='ArialMT',size=0.5,tip_length=0)
 
 p
-
 ```
-
-
 
 
 
