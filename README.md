@@ -67,7 +67,7 @@ R -e "rmarkdown::render('html/text_values.Rmd', output_file = 'text_values.html'
 ```
 
 ### Citation
-- URL: **pending** 
+- URL: https://www.nature.com/articles/s41586-020-2315-8 
 - DOI: https://doi.org/10.1038/s41586-020-2315-8
 
 ### Contact
