@@ -71,4 +71,4 @@ R -e "rmarkdown::render('html/text_values.Rmd', output_file = 'text_values.html'
 - DOI: https://doi.org/10.1038/s41586-020-2315-8
 
 ### Contact
-E-mail any questions to [gorelica@mskcc.org](mailto:gorelica@mskcc.org?subject=[GitHub]%20Composite-Mutations%20paper).
+E-mail any questions to [gorelica@stanford.edu](mailto:gorelica@stanford.edu?subject=[GitHub]%20Composite-Mutations%20paper).
